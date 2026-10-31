@@ -6,6 +6,8 @@ the CLI for live inspection and user-operated control.
 
 Python 3.12 · MIT · Linux SocketCAN for followers · Independent community project
 
+**[中文使用文档 / Wiki](docs/wiki/Home.md)** · [常用命令](docs/wiki/CLI-Reference.md) · [Python API](docs/wiki/Python-API.md) · [Mac / Windows 远程访问](docs/wiki/Remote-Access.md)
+
 ## Install only what you need
 
 Create a Python 3.12 virtual environment, then install from a release tag:
