@@ -3,15 +3,20 @@
 `openarm-runtime platform` brings motor control, teleoperation, tactile and
 vision into one local workspace at **http://127.0.0.1:8888**. Use the sidebar to
 open each module; all pages, images and WebSocket connections pass through this
-one address. The gateway preserves the existing modules' control behavior and
-coordinates service ownership; it does not add a hardware control API.
+one address. The dashboard uses NiceGUI components on FastAPI/Uvicorn, and
+aiohttp handles upstream HTTP, streaming responses and WebSocket connections.
+Viser continues to provide the robot and tactile 3D views. The existing service
+manager coordinates hardware ownership and shutdown.
 
 ## Local workstation
 
-With the development environment and external configuration prepared:
+The platform is an unreleased feature of the current checkout. Install the
+optional platform dependencies, then configure the machine:
 
 ```sh
 cd /path/to/openarm-runtime
+# Run with this checkout's activated Python 3.12 environment.
+python -m pip install -e ".[platform]"
 python3 run_platform.py
 ```
 
@@ -76,8 +81,11 @@ create navigation tabs. This lets a workstation retain an existing vision
 page and its capture services. Other machines can use the package's single
 `video` command as shown in the example.
 
-The platform uses only Python's standard library. Each child service needs its
-own dependencies: `[leader,viewer,follower]`, `[tactile,viewer]`, or `[video]`.
+The optional `[platform]` extra installs NiceGUI and aiohttp. Configuration
+loading, service management, core imports and CLI help remain usable without
+these dependencies; starting the platform requires them. Each child service
+needs its own dependencies: `[leader,viewer,follower]`, `[tactile,viewer]`,
+or `[video]`. Install the combination used by your configured commands.
 See [workstation setup](workstation.md) for the native CAN SDK, and run
 `openarm-runtime prepare --asset-root ~/.cache/openarm-models` once for the
 verified official model assets.
@@ -93,13 +101,27 @@ openarm-runtime platform --profile ~/.config/openarm-runtime/platform.json --att
 Without `--profile`, the CLI provides only the default endpoint mapping. It does
 not infer launch commands or discover arbitrary running hardware services.
 
+## Server lifecycle
+
+Use the platform CLI with one server process and no development reloader. The
+ASGI lifespan owns the shared aiohttp client session and the service manager;
+startup does not enable motors. Blocking process selection and shutdown run
+outside the event loop so camera and WebSocket traffic can keep flowing.
+Shutdown closes proxy connections and the services owned by this platform.
+
+Do not run multiple Uvicorn workers or automatic reload against a hardware
+configuration: each process would otherwise create its own service lifecycle.
+Configuration paths, backend ports and the public CLI are unchanged by the
+framework migration. Existing profiles can be used after installing `[platform]`.
+
 ## Navigation and service ownership
 
 - Overview shows listener reachability, not sensor health or motor state. Each
   module remains the source of hardware status. A disconnected sensor can have
   a reachable page service; read its device status before operating it.
-- Pages load when selected. Tactile/vision navigation retains loaded frames and
-  the current control connection. Selecting a sensing page does not stop motion;
+- Each browser has its own NiceGUI dashboard. Module frames load when selected
+  and remain mounted while hidden; sensing navigation retains their WebSocket
+  connections and the current controller view. Selecting a sensing page does not stop motion;
   use the original page's stop control. Explicit refresh retains its normal
   disconnect behavior and asks for confirmation.
 - Motor control and teleoperation form one mutually exclusive group. The control
@@ -120,9 +142,10 @@ not infer launch commands or discover arbitrary running hardware services.
   service automatically restarts after failure.
 
 The server binds only `127.0.0.1`. The gateway routes only to configured local
-services. Process-changing platform requests accept same-origin JSON only;
-commands and private paths are not exposed by the public config API. Module
-pages now share the platform origin; browser preferences saved on the old
+services. REST selections require same-origin JSON; dashboard actions use the
+NiceGUI session. Upstream mutation and WebSocket requests are restricted to the
+platform origin. Commands and private paths are not exposed by the public
+config API. Module pages now share the platform origin; browser preferences saved on the old
 separate-port pages may need to be set again. Machine configuration, calibration,
 log files and SDK/model artifacts stay outside version control.
 

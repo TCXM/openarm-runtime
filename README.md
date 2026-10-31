@@ -26,6 +26,7 @@ Extras compose freely:
 - `viewer`: Viser + URDF/mesh loading.
 - `tactile`: pinned community Paxini SDK + PySerial; combine with `viewer` for visualization.
 - `video`: OpenCV headless + NumPy + Flask; independent of Viser, leaders and CAN.
+- `platform` (unreleased; current checkout): NiceGUI/FastAPI dashboard and aiohttp gateway.
 - `follower`: official OpenArm CAN SDK 1.4.1 and its build dependencies.
 
 The follower extra requires a Linux machine and the matching native C++ SDK.
@@ -78,16 +79,22 @@ see [contributing](CONTRIBUTING.md).
 ## Use all modules through one address
 
 The **OpenArm Platform** combines motor control, teleoperation, tactile and
-vision at **http://127.0.0.1:8888**. Configure the machine once using
-[platform.example.json](platform.example.json), then launch one command:
+vision at **http://127.0.0.1:8888**. NiceGUI provides the dashboard; its
+FastAPI/Uvicorn server and aiohttp proxy carry module pages and real-time data
+through that address. This feature is in the current checkout, not the v0.5.0
+release. Install its optional dependencies from this checkout, configure the
+machine once using [platform.example.json](platform.example.json), then launch:
 
 ```sh
+python -m pip install -e ".[platform]"
 openarm-runtime platform --profile ~/.config/openarm-runtime/platform.json
 ```
 
-In a configured development checkout, `python3 run_platform.py` selects the
-project's environment automatically. For another computer, only one SSH forward
-is needed, including camera images and all Viser connections:
+Install each configured module's extras as well (`leader,viewer,follower`,
+`tactile,viewer`, and/or `video`); the platform extra does not install hardware
+SDKs. In a configured development checkout, `python3 run_platform.py` selects
+the project's environment automatically. For another computer, only one SSH
+forward is needed, including camera images and all Viser connections:
 
 ```sh
 ssh -N -L 8888:127.0.0.1:8888 USER@WORKSTATION

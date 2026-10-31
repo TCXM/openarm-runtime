@@ -72,7 +72,7 @@ print(openarm_runtime.__version__)
             self.assertTrue(root.joinpath(name).is_file(), name)
         self.assertIn("/frame/", root.joinpath("static/viewer.js").read_text())
         platform = files("openarm_platform")
-        for name in ("static/index.html", "static/platform.js", "static/platform.css"):
+        for name in ("dashboard.py", "static/platform.css"):
             self.assertTrue(platform.joinpath(name).is_file(), name)
 
     def test_video_cli_rejects_missing_profile_without_starting_devices(self):

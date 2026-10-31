@@ -239,3 +239,34 @@ previews were 960×540. These are a short live observation, not a sustained
 throughput guarantee. Browser verification displayed all four real images and
 both tactile viewers through the one platform port, with no off-origin module
 requests or JavaScript errors. No motor controls were operated.
+
+
+## NiceGUI/aiohttp migration acceptance — 2026-10-31
+
+The platform dashboard now uses NiceGUI 3.18.0 on FastAPI/Uvicorn. Its HTTP,
+streaming and WebSocket proxy uses aiohttp 3.14.5. The optional `platform` extra
+keeps core imports passive. Source validation ran 212 Python tests with two
+optional checks skipped. A fresh core-only wheel installation outside the
+checkout ran 212 tests with 37 optional checks skipped; installing the platform
+extra then passed all 45 platform tests. Package builds and the locked dependency
+check passed. Coverage includes same-origin framework polling and WebSockets,
+request cancellation while switching services, binding before child startup,
+and preserving cleanup failures when Uvicorn re-raises a shutdown signal.
+
+A Chromium trial using actual NiceGUI and Viser with software control fixtures
+verified button events over WebSocket, retained controller iframe identity when
+visiting tactile/video, both nested tactile viewers, four video images, and
+confirmed control/teleoperation switches in both directions. All 732 observed
+HTTP requests and six WebSockets used the one gateway address, with no page
+JavaScript errors. A separate trial stopped that mock platform while controller
+and tactile connections were open: every owned service port closed within the
+0.45-second observation, with no ASGI exception trace. This timing is specific
+to software fixtures, not a claim about physical motor shutdown duration.
+
+After replacement of the local entry process, a read-only browser visit displayed
+both real tactile viewers and all four real camera images through port 8888.
+All 356 observed HTTP requests and three WebSockets stayed on that origin, with
+no page JavaScript errors. Short counter observations measured 30.0 fps for head
+RGB and depth, and 59.4 fps per wrist at 1280×720. Both tactile pages reported
+about 59.7 Hz. No motor movement was commanded. Existing external control-service
+ownership and the earlier physical-teleoperation validation limits still apply.

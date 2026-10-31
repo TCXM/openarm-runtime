@@ -19,11 +19,6 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-      - name: Test platform browser behavior
-        run: node --test tests/test_platform_frontend.cjs
       - name: Build distributions
         run: |
           python -m pip install build
@@ -38,6 +33,18 @@ jobs:
           "$RUNNER_TEMP/runtime-test/bin/python" -I -m unittest discover -s "$GITHUB_WORKSPACE/tests"
           "$RUNNER_TEMP/runtime-test/bin/python" "$GITHUB_WORKSPACE/examples/read_leader.py" --help
           "$RUNNER_TEMP/runtime-test/bin/python" "$GITHUB_WORKSPACE/examples/read_follower.py" --help
+      - name: Test optional platform from installed wheel
+        env:
+          OPENARM_EXPECT_INSTALLED: '1'
+        run: |
+          "$RUNNER_TEMP/runtime-test/bin/python" - <<'PY'
+          from pathlib import Path
+          import subprocess, sys
+          wheel = next(Path('dist').glob('*.whl')).resolve()
+          subprocess.run([sys.executable, '-m', 'pip', 'install', str(wheel) + '[platform]'], check=True)
+          PY
+          cd "$RUNNER_TEMP"
+          "$RUNNER_TEMP/runtime-test/bin/python" -I -m unittest discover -s "$GITHUB_WORKSPACE/tests" -p 'test_platform*.py'
       - name: Test optional video from installed wheel
         env:
           OPENARM_EXPECT_INSTALLED: '1'

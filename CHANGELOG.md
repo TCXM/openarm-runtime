@@ -9,6 +9,11 @@
   forward. Motor control/teleoperation switch exclusively through the existing
   shutdown paths; external services remain externally owned. Failed sensing
   services can be retried explicitly from the workspace.
+- Use NiceGUI components and its FastAPI/Uvicorn server for the platform
+  dashboard, with aiohttp managing upstream HTTP and WebSocket connections.
+  Add the optional `platform` extra; core imports and CLI help stay passive.
+  Preserve mounted module views during sensing navigation and keep the existing
+  motor-control lifecycle and exclusive mode switching.
 
 ## 0.5.0 — 2026-10-31
 

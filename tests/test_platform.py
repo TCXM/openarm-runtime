@@ -1,6 +1,8 @@
 """Configuration and HTTP boundaries for the platform, with no hardware services."""
 from dataclasses import replace
-import http.client
+import asyncio
+import importlib.util
+import socket
 import json
 from pathlib import Path
 import subprocess
@@ -8,10 +10,11 @@ import sys
 import tempfile
 import threading
 import unittest
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from openarm_platform import load_config
-from openarm_platform.app import make_server
+from openarm_platform.app import Coordinator, create_app, serve
 
 
 class PlatformTests(unittest.TestCase):
@@ -59,76 +62,130 @@ with patch('socket.socket', side_effect=AssertionError('socket')), patch('subpro
     from openarm_platform import load_config
     import openarm_platform.app
     config = load_config()
-assert not any(x in sys.modules for x in ('viser', 'serial', 'openarm_can', 'paxini_sdk', 'flask'))
+assert not any(x in sys.modules for x in ('viser', 'serial', 'openarm_can', 'paxini_sdk', 'flask', 'nicegui', 'aiohttp', 'fastapi'))
 """
         subprocess.run([sys.executable, '-I', '-c', script], cwd='/tmp', check=True)
         result = subprocess.run([sys.executable, '-I', '-m', 'openarm_runtime', 'platform', '--help'],
                                 cwd='/tmp', check=True, capture_output=True, text=True)
         self.assertIn('--attach-only', result.stdout)
 
-    def test_http_assets_status_and_selection_boundary(self):
+
+PLATFORM_INSTALLED = all(importlib.util.find_spec(name) is not None
+                         for name in ('nicegui', 'aiohttp', 'fastapi'))
+
+
+@unittest.skipUnless(PLATFORM_INSTALLED, 'Requires the platform extra')
+class PlatformApiTests(unittest.TestCase):
+    def client(self, manager, *, attach_only=False):
+        from starlette.testclient import TestClient
+        return TestClient(create_app(load_config(), manager, attach_only=attach_only, with_ui=False),
+                          base_url='http://127.0.0.1:8888')
+
+    def test_http_status_selection_and_origin_boundary(self):
         manager = Mock()
         manager.status.return_value = {'control': {'state': 'external', 'reachable': True}}
-        config = replace(load_config(), port=0)
-        server = make_server(config, manager)
-        thread = threading.Thread(target=server.serve_forever, daemon=True)
-        thread.start()
-        port = server.server_port
-
-        def request(method, path, data=None, origin=None):
-            connection = http.client.HTTPConnection('127.0.0.1', port, timeout=3)
-            headers = {}
-            if data is not None:
-                headers['Content-Type'] = 'application/json'
-            if origin:
-                headers['Origin'] = origin
-            connection.request(method, path, body=json.dumps(data) if data is not None else None, headers=headers)
-            response = connection.getresponse()
-            result = response.status, response.read()
-            connection.close()
-            return result
-
-        try:
-            code, body = request('GET', '/')
-            self.assertEqual(code, 200)
-            self.assertIn(b'OpenArm Platform', body)
-            for path in ('/static/platform.js', '/static/platform.css'):
-                self.assertEqual(request('GET', path)[0], 200)
-            self.assertEqual(request('GET', '/../../pyproject.toml')[0], 404)
-            code, body = request('GET', '/api/config')
-            self.assertEqual(len(json.loads(body)['pages']), 4)
-            self.assertNotIn('command', body.decode())
-            self.assertEqual(request('GET', '/api/status')[0], 200)
-            self.assertEqual(request('POST', '/api/select', {'id': 'control'}, 'https://evil.invalid')[0], 403)
+        manager.activate.return_value = manager.status.return_value
+        with self.client(manager) as client:
+            manager.start.assert_called_once()
+            response = client.get('/api/config')
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(len(response.json()['pages']), 4)
+            self.assertNotIn('command', response.text)
+            self.assertNotIn('cwd', response.text)
+            self.assertEqual(client.get('/api/status').json()['services'], manager.status.return_value)
+            self.assertEqual(client.get('/api/status').headers['x-frame-options'], 'SAMEORIGIN')
+            self.assertEqual(client.get('/api/status', headers={'Host': 'evil.invalid'}).status_code, 403)
+            self.assertEqual(client.get('/_nicegui_ws/socket.io/?EIO=4&transport=polling',
+                                        headers={'Origin': 'https://evil.invalid'}).status_code, 403)
+            self.assertEqual(client.post('/api/select', json={'id': 'control'},
+                                        headers={'Origin': 'https://evil.invalid'}).status_code, 403)
+            self.assertEqual(client.post('/api/select', json={'id': 'control'}).status_code, 403)
             manager.activate.assert_not_called()
-            self.assertEqual(request('POST', '/api/select', {'id': 'control'}, f'http://127.0.0.1:{port}')[0], 200)
+            headers = {'Origin': 'http://127.0.0.1:8888'}
+            self.assertEqual(client.post('/api/select', json={'id': 'control'}, headers=headers).status_code, 200)
             manager.activate.assert_called_once_with('control')
+            for data in ({'id': 'unknown'}, {'id': []}, {'id': 'control', 'extra': True}):
+                self.assertEqual(client.post('/api/select', json=data, headers=headers).status_code, 409)
+            self.assertEqual(client.post('/api/select', content='x' * 2048,
+                                        headers={**headers, 'Content-Type': 'application/json'}).status_code, 409)
             manager.activate.side_effect = ValueError('external controller is active')
-            code, body = request('POST', '/api/select', {'id': 'teleop'}, f'http://127.0.0.1:{port}')
-            self.assertEqual(code, 409)
-            self.assertIn(b'external controller', body)
-        finally:
-            server.shutdown()
-            thread.join(3)
-            server.server_close()
+            response = client.post('/api/select', json={'id': 'teleop'}, headers=headers)
+            self.assertEqual(response.status_code, 409)
+            self.assertIn('external controller', response.text)
+        manager.close.assert_called_once()
 
-    def test_attach_only_never_activates_a_process(self):
+    def test_attach_only_never_starts_or_selects_a_service(self):
         manager = Mock()
         manager.status.return_value = {}
-        server = make_server(replace(load_config(), port=0), manager, attach_only=True)
-        thread = threading.Thread(target=server.serve_forever, daemon=True)
-        thread.start()
+        with self.client(manager, attach_only=True) as client:
+            self.assertTrue(client.get('/api/config').json()['attach_only'])
+            response = client.post('/api/select', json={'id': 'control'},
+                                   headers={'Origin': 'http://127.0.0.1:8888'})
+            self.assertEqual(response.status_code, 200)
+        manager.start.assert_not_called()
+        manager.activate.assert_not_called()
+        manager.close.assert_called_once()
+
+    def test_failed_startup_still_cleans_up(self):
+        manager = Mock()
+        manager.start.side_effect = RuntimeError('startup failed')
+        with self.assertRaisesRegex(RuntimeError, 'startup failed'), self.client(manager):
+            pass
+        manager.close.assert_called_once()
+
+    def test_occupied_entry_port_does_not_construct_app_or_start_services(self):
+        with socket.socket() as listener:
+            listener.bind(('127.0.0.1', 0))
+            listener.listen()
+            with patch('openarm_platform.app.create_app') as factory, self.assertRaises(OSError):
+                serve(load_config().with_port(listener.getsockname()[1]))
+            factory.assert_not_called()
+
+
+    def test_signal_reraise_cannot_hide_service_cleanup_failure(self):
+        application = SimpleNamespace(state=SimpleNamespace(shutdown_error=None))
+        class InterruptedServer:
+            def __init__(self, config):
+                self.config = config
+                self.started = True
+            def run(self, **kwargs):
+                self.config.app.state.shutdown_error = RuntimeError('controller cleanup failed')
+                raise KeyboardInterrupt('re-raised SIGTERM')
+        with patch('openarm_platform.app.create_app', return_value=application), \
+             patch('uvicorn.Server', InterruptedServer), \
+             self.assertRaisesRegex(RuntimeError, 'Platform service cleanup failed') as raised:
+            serve(replace(load_config(), port=0))
+        self.assertIn('controller cleanup failed', str(raised.exception.__cause__))
+
+
+class CoordinatorTests(unittest.IsolatedAsyncioTestCase):
+    async def test_blocking_operations_do_not_block_loop_and_cancelled_switch_is_drained(self):
+        entered, release = threading.Event(), threading.Event()
+        manager = Mock()
+        events = []
+        def switch(name):
+            entered.set()
+            release.wait(2)
+            events.append('switched')
+            return {}
+        manager.activate.side_effect = switch
+        manager.close.side_effect = lambda: events.append('closed')
+        coordinator = Coordinator(manager)
+        operation = asyncio.create_task(coordinator.activate('teleop'))
         try:
-            connection = http.client.HTTPConnection('127.0.0.1', server.server_port, timeout=3)
-            connection.request('POST', '/api/select', body='{"id":"control"}', headers={
-                'Content-Type': 'application/json', 'Origin': f'http://127.0.0.1:{server.server_port}'})
-            response = connection.getresponse()
-            self.assertEqual(response.status, 200)
-            response.read()
-            connection.close()
-            manager.activate.assert_not_called()
-            manager.start.assert_not_called()
+            self.assertTrue(await asyncio.to_thread(entered.wait, 1))
+            # The event loop remains responsive while the process manager waits.
+            self.assertEqual(await asyncio.wait_for(asyncio.sleep(0, result='responsive'), .2), 'responsive')
+            operation.cancel()
+            with self.assertRaises(asyncio.CancelledError):
+                await operation
+            closing = asyncio.create_task(coordinator.close())
+            await asyncio.sleep(.02)
+            self.assertFalse(closing.done())
+            with self.assertRaises(RuntimeError):
+                await coordinator.status()
+            release.set()
+            await asyncio.wait_for(closing, 2)
+            self.assertEqual(events, ['switched', 'closed'])
         finally:
-            server.shutdown()
-            thread.join(3)
-            server.server_close()
+            release.set()

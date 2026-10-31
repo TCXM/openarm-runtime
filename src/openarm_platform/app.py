@@ -1,158 +1,225 @@
-"""Loopback HTTP shell and lifecycle for unchanged OpenArm web applications."""
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from importlib.resources import files
+"""NiceGUI/FastAPI workspace with one aiohttp gateway and one service owner.
+
+Importing this module is passive and does not require the platform extra.
+"""
+import asyncio
+from contextlib import asynccontextmanager
 import json
 import socket
-import threading
 from urllib.parse import urlsplit
 
 from .services import ServiceManager
-from .proxy import proxy, resolve, routes
 
 
-class PlatformServer(ThreadingHTTPServer):
-    """Close live streams before joining handlers and cleaning up services."""
-    daemon_threads = False
+class Coordinator:
+    """Keep blocking hardware-process operations off the ASGI event loop.
 
-    def __init__(self, *args, **kwargs):
-        self.stopping = threading.Event()
-        self._sockets = set()
-        self._sockets_lock = threading.Lock()
-        super().__init__(*args, **kwargs)
+    Request cancellation does not cancel an in-progress stop/switch. Shutdown
+    waits for those operations before the manager performs its final cleanup.
+    """
 
-    def track_socket(self, connection):
-        with self._sockets_lock:
-            if self.stopping.is_set():
-                connection.close()
-                raise OSError('Gateway is closing')
-            self._sockets.add(connection)
+    def __init__(self, manager, *, attach_only=False):
+        self.manager = manager
+        self.attach_only = attach_only
+        self.closing = False
+        self._operations = set()
 
-    def untrack_socket(self, connection):
-        with self._sockets_lock:
-            self._sockets.discard(connection)
+    async def _call(self, function, *args):
+        if self.closing:
+            raise RuntimeError('平台正在关闭，请等待服务停止。')
+        operation = asyncio.create_task(asyncio.to_thread(function, *args))
+        self._operations.add(operation)
+        def finished(task):
+            self._operations.discard(task)
+            if not task.cancelled():
+                task.exception()  # Retrieve errors even if the request disconnected.
+        operation.add_done_callback(finished)
+        return await asyncio.shield(operation)
 
-    def server_close(self):
-        self.stopping.set()
-        with self._sockets_lock:
-            connections = list(self._sockets)
-        for connection in connections:
-            try:
-                connection.shutdown(socket.SHUT_RDWR)
-            except OSError:
-                pass
-        super().server_close()
+    async def start(self):
+        if not self.attach_only:
+            await self._call(self.manager.start)
+
+    async def status(self):
+        return await self._call(self.manager.status)
+
+    async def activate(self, name):
+        if self.attach_only:
+            return await self.status()
+        return await self._call(self.manager.activate, name)
+
+    def begin_shutdown(self):
+        self.closing = True
+
+    async def close(self):
+        self.begin_shutdown()
+        if self._operations:
+            await asyncio.gather(*tuple(self._operations), return_exceptions=True)
+        await asyncio.to_thread(self.manager.close)
 
 
-def make_server(config, manager, *, attach_only=False):
-    assets = files('openarm_platform').joinpath('static')
-    mapping = routes(config)
+class LocalBoundary:
+    """Protect both framework events and proxied modules on the loopback server."""
 
-    class Handler(BaseHTTPRequestHandler):
-        def setup(self):
-            super().setup()
-            self.connection.settimeout(45)
-            self.server.track_socket(self.connection)
+    def __init__(self, app):
+        self.app = app
 
-        def finish(self):
-            try:
-                super().finish()
-            finally:
-                self.server.untrack_socket(self.connection)
-
-        def log_message(self, *_):
-            pass
-
-        def send(self, status, content, content_type='application/json; charset=utf-8', *, head=False):
-            if not isinstance(content, bytes):
-                content = json.dumps(content, ensure_ascii=False).encode()
-            self.send_response(status)
-            self.send_header('Content-Type', content_type)
-            self.send_header('Content-Length', str(len(content)))
-            self.send_header('Cache-Control', 'no-store')
-            self.send_header('X-Content-Type-Options', 'nosniff')
-            self.send_header('X-Frame-Options', 'SAMEORIGIN')
-            self.end_headers()
-            if not head:
-                self.wfile.write(content)
-
-        def valid_host(self):
-            try:
-                return urlsplit('http://' + self.headers.get('Host', '')).hostname in ('127.0.0.1', 'localhost', '::1')
-            except ValueError:
-                return False
-
-        def do_GET(self, head=False):
-            if not self.valid_host():
-                self.send(403, {'error': 'Use a localhost SSH forward'}, head=head)
-                return
-            route = resolve(self.path, mapping)
-            if route is not None:
-                proxy(self, route, mapping, head=head)
-                return
-            path = urlsplit(self.path).path
-            if path == '/api/config':
-                self.send(200, dict(title=config.title, port=config.port, attach_only=attach_only,
-                                    pages=[p.public() for p in config.pages]), head=head)
-            elif path == '/api/status':
-                self.send(200, {'services': manager.status()}, head=head)
-            elif path in ('/', '/index.html', '/static/platform.css', '/static/platform.js'):
-                name, mime = {'/': ('index.html', 'text/html'), '/index.html': ('index.html', 'text/html'),
-                              '/static/platform.css': ('platform.css', 'text/css'),
-                              '/static/platform.js': ('platform.js', 'text/javascript')}[path]
-                self.send(200, assets.joinpath(name).read_bytes(), mime + '; charset=utf-8', head=head)
+    async def __call__(self, scope, receive, send):
+        if scope['type'] not in ('http', 'websocket'):
+            return await self.app(scope, receive, send)
+        headers = scope.get('headers', [])
+        hosts = [v.decode('latin-1') for k, v in headers if k.lower() == b'host']
+        origins = [v.decode('latin-1') for k, v in headers if k.lower() == b'origin']
+        host = hosts[0] if len(hosts) == 1 else ''
+        try:
+            address = urlsplit('http://' + host)
+            valid = (bool(host) and address.hostname in ('127.0.0.1', 'localhost', '::1')
+                     and address.netloc == host and not address.username and not address.password
+                     and not address.path and not address.query and not address.fragment)
+            _ = address.port  # Reject malformed port syntax.
+        except ValueError:
+            valid = False
+        unsafe = scope['type'] == 'websocket' or scope.get('method') not in ('GET', 'HEAD', 'OPTIONS')
+        if (not valid or (origins and origins != ['http://' + host])
+                or (unsafe and origins != ['http://' + host])):
+            if scope['type'] == 'websocket':
+                await send({'type': 'websocket.close', 'code': 1008})
             else:
-                self.send(404, {'error': 'Not found'}, head=head)
+                body = b'{"error":"Use a localhost address and same-origin requests"}'
+                await send({'type': 'http.response.start', 'status': 403,
+                            'headers': [(b'content-type', b'application/json'),
+                                        (b'content-length', str(len(body)).encode())]})
+                await send({'type': 'http.response.body', 'body': body})
+            return
 
-        def do_HEAD(self):
-            self.do_GET(head=True)
+        async def secured(message):
+            if message['type'] == 'http.response.start':
+                message['headers'] = [(key, value) for key, value in message.get('headers', [])
+                                      if key.lower() not in (b'x-frame-options', b'x-content-type-options')]
+                message['headers'].extend([(b'x-frame-options', b'SAMEORIGIN'),
+                                           (b'x-content-type-options', b'nosniff')])
+            await send(message)
+        await self.app(scope, receive, secured)
 
-        def do_POST(self):
-            route = resolve(self.path, mapping)
-            if route is not None and self.valid_host():
-                proxy(self, route, mapping)
-                return
-            if (not self.valid_host() or self.headers.get('Origin') != 'http://' + self.headers.get('Host', '')
-                    or self.headers.get('Content-Type', '').split(';')[0].strip() != 'application/json'):
-                self.send(403, {'error': 'Same-origin JSON request required'})
-                return
-            if urlsplit(self.path).path != '/api/select':
-                self.send(404, {'error': 'Not found'})
-                return
+
+def create_app(config, manager=None, *, attach_only=False, with_ui=True):
+    """Construct one ASGI application; hardware starts only in its lifespan.
+
+    ``with_ui=False`` is for focused API/gateway tests. Normal platform launches
+    always mount the NiceGUI dashboard. Do not run this app with multiple workers.
+    """
+    try:
+        from fastapi import FastAPI, Request
+        from starlette.responses import JSONResponse
+        from .proxy import Gateway
+        if with_ui:
+            from nicegui import ui
+            from .dashboard import build_dashboard
+    except ImportError as exc:
+        raise RuntimeError('平台需要可选依赖：pip install "openarm-runtime[platform]"') from exc
+
+    if manager is None:
+        manager = ServiceManager(config.services, config.log_dir)
+    coordinator = Coordinator(manager, attach_only=attach_only)
+    gateway = Gateway(config)
+
+    @asynccontextmanager
+    async def lifespan(app):
+        try:
+            await gateway.start()
+            await coordinator.start()
+            yield
+        finally:
+            coordinator.begin_shutdown()
             try:
-                size = int(self.headers.get('Content-Length', '0'))
-                if not 0 < size <= 1024:
+                await gateway.close()
+            finally:
+                try:
+                    await coordinator.close()
+                except BaseException as exc:
+                    app.state.shutdown_error = exc
+                    raise
+
+    app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
+    app.state.gateway = gateway
+    app.state.coordinator = coordinator
+    app.state.shutdown_error = None
+    app.add_middleware(LocalBoundary)
+
+    @app.get('/api/config')
+    async def configuration():
+        return JSONResponse(dict(title=config.title, port=config.port, attach_only=attach_only,
+                                 pages=[p.public() for p in config.pages]),
+                            headers={'Cache-Control': 'no-store'})
+
+    @app.get('/api/status')
+    async def status():
+        try:
+            return JSONResponse({'services': await coordinator.status()}, headers={'Cache-Control': 'no-store'})
+        except RuntimeError as exc:
+            return JSONResponse({'error': str(exc)}, status_code=503)
+
+    @app.post('/api/select')
+    async def select(request: Request):
+        if request.headers.get('content-type', '').split(';')[0].strip() != 'application/json':
+            return JSONResponse({'error': 'Same-origin JSON request required'}, status_code=403)
+        try:
+            content = bytearray()
+            async for chunk in request.stream():
+                content.extend(chunk)
+                if len(content) > 1024:
                     raise ValueError('Invalid request size')
-                data = json.loads(self.rfile.read(size))
-                if not isinstance(data, dict) or set(data) != {'id'} or not isinstance(data['id'], str) or data['id'] not in {p.id for p in config.pages}:
-                    raise ValueError('Select a configured page')
-                if not attach_only:
-                    manager.activate(data['id'])
-                self.send(200, {'services': manager.status()})
-            except (ValueError, RuntimeError, OSError) as exc:
-                self.send(409, {'error': str(exc)})
+            data = json.loads(content)
+            if (not isinstance(data, dict) or set(data) != {'id'} or not isinstance(data['id'], str)
+                    or data['id'] not in {page.id for page in config.pages}):
+                raise ValueError('Select a configured page')
+            return JSONResponse({'services': await coordinator.activate(data['id'])},
+                                headers={'Cache-Control': 'no-store'})
+        except (ValueError, RuntimeError, OSError) as exc:
+            return JSONResponse({'error': str(exc)}, status_code=409)
 
-        do_PUT = do_POST
-        do_PATCH = do_POST
-        do_DELETE = do_POST
-
-    server = PlatformServer(('127.0.0.1', config.port), Handler)
-    server.timeout = 0.25
-    # Selection callbacks finish before manager cleanup, to avoid starting a child after close.
-    server.daemon_threads = False
-    return server
+    gateway.install(app)
+    if with_ui:
+        async def dashboard():
+            await build_dashboard(config, coordinator, attach_only=attach_only)
+        ui.run_with(app, root=dashboard, title=config.title, language='zh-CN',
+                    dark=False, show_welcome_message=False, reconnect_timeout=10,
+                    binding_refresh_interval=None, on_air=None)
+    return app
 
 
 def serve(config, *, attach_only=False):
-    manager = ServiceManager(config.services, config.log_dir)
-    with make_server(config, manager, attach_only=attach_only) as server:
+    """Run one loopback worker, binding before any service can be launched."""
+    try:
+        import uvicorn
+    except ImportError as exc:
+        raise RuntimeError('平台需要可选依赖：pip install "openarm-runtime[platform]"') from exc
+    # Bind first: an occupied entry port must never trigger child/device startup.
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
+        listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        listener.bind(('127.0.0.1', config.port))
+        listener.listen(128)
+        app = create_app(config, attach_only=attach_only)
+
+        class PlatformServer(uvicorn.Server):
+            async def shutdown(self, sockets=None):
+                app.state.coordinator.begin_shutdown()
+                await app.state.gateway.close()
+                await super().shutdown(sockets=sockets)
+
+        server = PlatformServer(uvicorn.Config(
+            app, host='127.0.0.1', port=config.port, workers=1, reload=False,
+            access_log=False, proxy_headers=False, server_header=False,
+            ws_max_size=64 * 1024 * 1024, timeout_graceful_shutdown=10,
+        ))
+        print(f'OpenArm Platform: http://127.0.0.1:{config.port}', flush=True)
+        print(f'服务日志：{config.log_dir} · Ctrl+C 关闭本次启动的服务', flush=True)
         try:
-            if not attach_only:
-                manager.start()
-            print(f'OpenArm Platform: http://127.0.0.1:{config.port}', flush=True)
-            print(f'服务日志：{config.log_dir} · Ctrl+C 关闭本次启动的服务', flush=True)
-            while True:
-                server.handle_request()
+            server.run(sockets=[listener])
         finally:
-            # Wait for in-flight selections before closing children.
-            server.server_close()
-            manager.close()
+            # Uvicorn re-raises handled signals after cleanup. A CLI interrupt
+            # must not hide a failed hardware-service shutdown.
+            if app.state.shutdown_error is not None:
+                raise RuntimeError('Platform service cleanup failed') from app.state.shutdown_error
+        if not server.started:
+            raise RuntimeError('Platform startup failed; see the startup error above')
