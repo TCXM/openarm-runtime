@@ -21,6 +21,10 @@ live anywhere; no sibling-directory layout is required. See the README's
 [installation modes](README.md#using-the-package-vs-developing-it) for pip and
 uv commands, when to reinstall, and how to return to a pinned release.
 
+The platform frontend has dependency-free behavior checks: run
+`node --test tests/test_platform_frontend.cjs` with Node 22 or newer. CI runs
+these alongside the installed-wheel Python suite.
+
 Tests must not open physical hardware. Test behavior at transport boundaries,
 including exception cleanup, rather than copying implementation details.
 Record actual hardware checks separately in [validation](docs/validation.md).

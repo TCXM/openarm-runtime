@@ -189,3 +189,33 @@ Calibration repeatability and multi-pose precision remain unmeasured; see
 [calibration](calibration.md).
 Continue new real-machine validation through explicit
 user actions; the SDK's protocol range is not a mechanical safe-contact limit.
+
+
+## Single-port platform acceptance — 2026-10-31
+
+The platform proxies control, teleoperation, tactile and video through one
+loopback address. Local validation covered 197 Python tests (two optional
+checks skipped), four Node frontend behavior tests, and a source/wheel build.
+A fresh core-only environment outside the checkout ran all 197 tests with
+16 optional-dependency checks skipped, including installed-resource assertions.
+
+A headless Chromium trial used actual Viser servers with software-only control
+fixtures, the existing dual-tactile document with two fixture viewers, and the
+video simulator. It exercised GUI events over WebSocket, sensing navigation
+while retaining the controller connection, control/teleoperation service
+switching in both directions, and four displayed camera frames. All 1,289 HTTP
+requests and five observed WebSocket connections used the single gateway
+address. No page JavaScript errors or off-origin module requests were observed.
+This trial did not open motor hardware.
+
+The local platform was then started against the workstation's configured
+services. A browser opened only tactile and vision: both real tactile viewers
+reported acquisition at about 59.8 Hz; head RGB and depth images displayed at
+640-pixel width. All 170 observed HTTP requests and both tactile WebSockets
+used the platform address, with no page JavaScript errors. Wrist cameras were
+disconnected. An independent controller was still listening on its configured
+endpoint, so it remained externally owned and physical teleoperation switching
+was not exercised. The configured leader serial adapters and saved runtime
+leader calibration were absent. Real following requires those prerequisites
+and an operator-run motion trial; software gateway acceptance does not claim
+physical tracking accuracy or hardware readiness.

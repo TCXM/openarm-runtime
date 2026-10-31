@@ -41,7 +41,7 @@ print(openarm_runtime.__version__)
         with tempfile.TemporaryDirectory() as root:
             result = subprocess.run([sys.executable, "-I", "-m", "openarm_runtime", "--help"],
                                     cwd=root, capture_output=True, text=True, check=True)
-        for command in ("prepare", "leader", "check", "view", "panel", "calibrate", "video", "tactile"):
+        for command in ("prepare", "leader", "check", "view", "panel", "calibrate", "video", "tactile", "platform"):
             self.assertIn(command, result.stdout)
         with tempfile.TemporaryDirectory() as root:
             help_result = subprocess.run([sys.executable, "-I", "-m", "openarm_runtime", "video", "--help"],
@@ -58,10 +58,11 @@ print(openarm_runtime.__version__)
 
     @unittest.skipUnless(os.environ.get("OPENARM_EXPECT_INSTALLED"), "Wheel-only validation")
     def test_validation_uses_installed_wheel_not_checkout(self):
-        import openarm_runtime, openarm_tactile
+        import openarm_runtime, openarm_tactile, openarm_platform
         from importlib.metadata import version
         self.assertIn("site-packages", Path(openarm_runtime.__file__).parts)
         self.assertIn("site-packages", Path(openarm_tactile.__file__).parts)
+        self.assertIn("site-packages", Path(openarm_platform.__file__).parts)
         self.assertEqual(version("openarm-runtime"), "0.5.0")
 
     def test_video_resources_are_present_outside_source_tree(self):
@@ -70,6 +71,9 @@ print(openarm_runtime.__version__)
         for name in ("static/index.html", "static/viewer.js", "native/depth_capture.cpp"):
             self.assertTrue(root.joinpath(name).is_file(), name)
         self.assertIn("/frame/", root.joinpath("static/viewer.js").read_text())
+        platform = files("openarm_platform")
+        for name in ("static/index.html", "static/platform.js", "static/platform.css"):
+            self.assertTrue(platform.joinpath(name).is_file(), name)
 
     def test_video_cli_rejects_missing_profile_without_starting_devices(self):
         result = subprocess.run([sys.executable, "-I", "-m", "openarm_runtime", "video"],

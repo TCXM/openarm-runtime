@@ -75,6 +75,34 @@ extra still requires [native SDK setup](docs/workstation.md) in either mode.
 To develop the runtime on its own, use `uv sync --locked` in this repository;
 see [contributing](CONTRIBUTING.md).
 
+## Use all modules through one address
+
+The **OpenArm Platform** combines motor control, teleoperation, tactile and
+vision at **http://127.0.0.1:8888**. Configure the machine once using
+[platform.example.json](platform.example.json), then launch one command:
+
+```sh
+openarm-runtime platform --profile ~/.config/openarm-runtime/platform.json
+```
+
+In a configured development checkout, `python3 run_platform.py` selects the
+project's environment automatically. For another computer, only one SSH forward
+is needed, including camera images and all Viser connections:
+
+```sh
+ssh -N -L 8888:127.0.0.1:8888 USER@WORKSTATION
+```
+
+Control and teleoperation switch as mutually exclusive modes from the same
+sidebar; tactile and vision can stay connected alongside them. Startup never
+enables a motor or starts following. Stop the old independent controllers using
+their normal procedure before replacing their launches with the platform.
+Existing services can be reused but remain externally owned.
+
+See [platform setup](docs/platform.md) for configuration and migration. The
+individual commands below remain available for module diagnostics and API use;
+normal platform use does not require launching them separately.
+
 ## Read a leader in Python
 
 ```python

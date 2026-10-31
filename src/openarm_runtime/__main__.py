@@ -46,7 +46,33 @@ def main():
     tactile.add_argument("--port", type=int, default=8891)
     tactile.add_argument("--baudrate", type=int, default=921600)
     tactile.add_argument("--device-id", type=int, default=1, help="Sensor module number + 1 (1..255)")
+    platform = commands.add_parser("platform", help="OpenArm Platform: integrate existing control, teleop, tactile and vision pages")
+    platform.add_argument("--profile", type=Path, help="External platform service configuration")
+    platform.add_argument("--port", type=int, help="Override the platform port (default 8888)")
+    platform.add_argument("--attach-only", action="store_true", help="Only display existing services; never start or stop them")
     args = parser.parse_args()
+    if args.command == "platform":
+        from openarm_platform import load_config
+        from openarm_platform.app import serve as serve_platform
+        try:
+            config = load_config(args.profile)
+            if args.port is not None:
+                config = config.with_port(args.port)
+        except (OSError, ValueError, TypeError) as exc:
+            parser.error(str(exc))
+
+        def shutdown_platform(signum, frame):
+            raise KeyboardInterrupt(f"Signal {signum}")
+
+        previous = signal.signal(signal.SIGTERM, shutdown_platform)
+        try:
+            serve_platform(config, attach_only=args.attach_only)
+        except KeyboardInterrupt:
+            pass
+        finally:
+            signal.signal(signal.SIGTERM, previous)
+        return
+
     if args.command == "tactile":
         if not 1024 <= args.port <= 65535 or args.baudrate <= 0:
             parser.error("Port must be 1024..65535 and baudrate must be positive")

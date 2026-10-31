@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- Add the local OpenArm Platform workspace with unchanged control, teleoperation,
+  tactile and vision subpages, configured single-command startup and independent
+  page connections. One loopback port proxies HTTP, streaming images, Viser
+  WebSockets and both nested tactile views; remote clients need only one SSH
+  forward. Motor control/teleoperation switch exclusively through the existing
+  shutdown paths; external services remain externally owned. Failed sensing
+  services can be retried explicitly from the workspace.
+
 ## 0.5.0 — 2026-10-31
 
 - Add the optional `openarm_tactile` capture API and `tactile` extra, pinning the

@@ -1,0 +1,144 @@
+# OpenArm Platform
+
+`openarm-runtime platform` brings motor control, teleoperation, tactile and
+vision into one local workspace at **http://127.0.0.1:8888**. Use the sidebar to
+open each module; all pages, images and WebSocket connections pass through this
+one address. The gateway preserves the existing modules' control behavior and
+coordinates service ownership; it does not add a hardware control API.
+
+## Local workstation
+
+With the development environment and external configuration prepared:
+
+```sh
+cd /path/to/openarm-runtime
+python3 run_platform.py
+```
+
+Open http://127.0.0.1:8888 . The launcher uses this checkout's `.venv` and
+`~/.config/openarm-runtime/platform.json`. It starts configured missing services,
+reuses existing listeners and leaves reused processes alone when it exits.
+Ctrl+C closes only services started by this platform. Child output is in
+`~/.local/state/openarm-platform/` (`control.log`, `teleop.log`, etc.).
+
+When using a Mac browser over SSH, keep this command running on the Mac:
+
+```sh
+ssh -N -L 8888:127.0.0.1:8888 USER@WORKSTATION
+```
+
+Then open http://127.0.0.1:8888 on that computer. No module or tactile viewer
+port needs a separate forward. The interface generates this command under
+connection settings. If local port 8888 is already occupied, use a different
+local port, for example `-L 8889:127.0.0.1:8888`, then open local port 8889.
+The platform's `--port` option changes the workstation entry port.
+
+## Replace separate launches
+
+1. Stop the old standalone control, teleoperation and sensing processes that
+   this platform will manage, using their normal stop procedures.
+2. Copy and configure the example below once, then start only the platform.
+3. Use the platform address as the browser bookmark and retain one SSH forward.
+
+Existing listeners can also be reused, but remain externally owned: the
+platform will not stop them, and cannot switch away from an externally owned
+motor controller. Stopping the old controller lets the platform manage both
+control modes through the same interface. Opening the platform never enables
+motors or starts following.
+
+The old CLI commands remain available for Python/API users and individual module
+diagnostics. They do not need to be started separately for normal platform use.
+
+## Configuration
+
+Copy [platform.example.json](../platform.example.json) outside the repository,
+then set the local model, profile, calibration and device paths. Commands are
+argument arrays executed without a shell. `{python}` expands to the platform's
+Python interpreter; `~/` arguments expand to the current user's home. `cwd` and
+`log_dir` are resolved relative to the configuration file. No other shell
+expansion occurs. Startup never fabricates missing calibration.
+
+The top-level `port` is the only browser-facing port. Each of
+`services.control`, `services.teleop`, `services.tactile` and `services.vision`
+can specify `port`, `command`, `cwd` and `extra_ports`. These service ports are
+internal loopback endpoints used by the gateway. Keep them distinct and match
+each command's actual listening port. If a command is omitted, that endpoint
+is available only when externally started.
+
+Tactile defaults to its page port plus 10/11 for its two nested viewers; set
+`extra_ports: []` for a single-sensor page. Both nested viewers are proxied by
+the platform too. The sample keeps each module in its own process so its
+hardware lifecycle and existing cleanup behavior remain intact.
+
+Optional `support` entries use IDs such as `aux_rgb` or `aux_depth` and the same
+configuration shape. They are managed as background dependencies but do not
+create navigation tabs. This lets a workstation retain an existing vision
+page and its capture services. Other machines can use the package's single
+`video` command as shown in the example.
+
+The platform uses only Python's standard library. Each child service needs its
+own dependencies: `[leader,viewer,follower]`, `[tactile,viewer]`, or `[video]`.
+See [workstation setup](workstation.md) for the native CAN SDK, and run
+`openarm-runtime prepare --asset-root ~/.cache/openarm-models` once for the
+verified official model assets.
+
+Installed-package equivalent:
+
+```sh
+openarm-runtime platform --profile ~/.config/openarm-runtime/platform.json
+# Display existing endpoints without starting/stopping processes:
+openarm-runtime platform --profile ~/.config/openarm-runtime/platform.json --attach-only
+```
+
+Without `--profile`, the CLI provides only the default endpoint mapping. It does
+not infer launch commands or discover arbitrary running hardware services.
+
+## Navigation and service ownership
+
+- Overview shows listener reachability, not sensor health or motor state. Each
+  module remains the source of hardware status. A disconnected sensor can have
+  a reachable page service; read its device status before operating it.
+- Pages load when selected. Tactile/vision navigation retains loaded frames and
+  the current control connection. Selecting a sensing page does not stop motion;
+  use the original page's stop control. Explicit refresh retains its normal
+  disconnect behavior and asks for confirmation.
+- Motor control and teleoperation form one mutually exclusive group. The control
+  page holds read access to CAN; physical following requires exclusive access.
+  Startup chooses an existing member, or starts the configured control page.
+  Selecting the other mode stops the owned previous service through its original
+  shutdown path, then starts the selected service. The old frame is discarded;
+  its replacement is loaded when ready. No enable or follow action is automatic.
+- Existing services remain externally owned. If an independent control page is
+  running, switching to managed teleoperation is refused until its operator
+  stops it. The platform never terminates an externally started process.
+- Existing CAN locks are per Linux user, so they cannot exclude another user's
+  controller. This platform coordinates its configured control/teleop endpoints;
+  it cannot detect every other controller or port on a shared machine.
+- Owned motion services have 40 seconds to stop cleanly. A timeout or abnormal
+  exit blocks switching and is reported; motion processes are never forcibly
+  killed. Other owned service groups have bounded terminate/kill cleanup. No
+  service automatically restarts after failure.
+
+The server binds only `127.0.0.1`. The gateway routes only to configured local
+services. Process-changing platform requests accept same-origin JSON only;
+commands and private paths are not exposed by the public config API. Module
+pages now share the platform origin; browser preferences saved on the old
+separate-port pages may need to be set again. Machine configuration, calibration,
+log files and SDK/model artifacts stay outside version control.
+
+## Single-port routes
+
+These paths are useful for diagnostics; normal navigation stays in the platform.
+
+| Module | Gateway path |
+| --- | --- |
+| Motor control | `/apps/control/` |
+| Teleoperation | `/apps/teleop/` |
+| Tactile | `/apps/tactile/` |
+| Vision | `/apps/vision/` |
+
+Tactile's nested viewers use `/apps/tactile/_extra/0/` and
+`/apps/tactile/_extra/1/`. HTTP assets, camera responses and Viser WebSockets
+are forwarded through these paths without requiring client access to the
+internal ports. `/api/status` reports page service availability; it does not
+report synchronized hardware data or certify that a motor is disabled.

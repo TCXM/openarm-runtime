@@ -44,3 +44,5 @@ no-build-isolation-package = ["openarm-can"]
 
 [tool.setuptools.package-data]
 openarm_video = ["static/*.html", "static/*.js", "native/*.cpp"]
+
+openarm_platform = ["static/*.html", "static/*.css", "static/*.js"]
