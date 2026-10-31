@@ -82,7 +82,8 @@ class DepthTests(unittest.TestCase):
     def test_process_command_and_raw_depth_units_are_preserved(self):
         camera = self.camera()
         command = self.factory.call_args.args[0]
-        self.assertEqual(command, [self.config.depth_helper, str(camera._path), "640", "480", "30", self.config.uri])
+        self.assertEqual(command, [str(Path(self.config.depth_helper).resolve()), str(camera._path),
+                                   "640", "480", "30", self.config.uri])
         self.assertEqual(self.factory.call_args.kwargs["stdin"], subprocess.DEVNULL)
         camera._path.write_bytes(b"test frame")
         frame = camera.read()
@@ -205,19 +206,21 @@ class DepthBuildTests(unittest.TestCase):
             root = Path(directory)
             include, library = self.sdk(root)
             output = root / "bin/capture"
+            # macOS temporary directories may use /var -> /private/var aliases.
+            resolved_include, resolved_library = include.resolve(), library.resolve()
             def compile(command, **kwargs):
-                self.assertIn(str(library / "libOpenNI2.so"), command)
-                self.assertIn("-I" + str(include), command)
-                self.assertIn("-Wl,-rpath," + str(library), command)
+                self.assertIn(str(resolved_library / "libOpenNI2.so"), command)
+                self.assertIn("-I" + str(resolved_include), command)
+                self.assertIn("-Wl,-rpath," + str(resolved_library), command)
                 self.assertEqual(kwargs, {"check": True, "timeout": 120})
-                source = Path(command[command.index("-I" + str(include)) + 1])
+                source = Path(command[command.index("-I" + str(resolved_include)) + 1])
                 self.assertIn("PIXEL_FORMAT_DEPTH_1_MM", source.read_text())
                 target = Path(command[command.index("-o") + 1])
                 target.write_bytes(b"compiled helper")
                 target.chmod(0o700)
             with patch("openarm_video.depth.sys.platform", "linux"), \
                  patch("openarm_video.depth.subprocess.run", side_effect=compile):
-                self.assertEqual(build_depth_helper(include, library, output), output)
+                self.assertEqual(build_depth_helper(include, library, output), output.resolve())
             self.assertEqual(output.read_bytes(), b"compiled helper")
             self.assertTrue(os.access(output, os.X_OK))
 
@@ -240,8 +243,8 @@ class VideoProfileTests(unittest.TestCase):
                 {"name": "depth", "kind": "depth", "depth_helper": "bin/helper", "uri": "2bc5/0403@1/2"},
             ]}))
             rgb, depth = load_cameras(profile)
-            self.assertEqual(rgb.device, str(root / "devices/rgb"))
-            self.assertEqual(depth.depth_helper, str(root / "bin/helper"))
+            self.assertEqual(rgb.device, str((root / "devices/rgb").resolve()))
+            self.assertEqual(depth.depth_helper, str((root / "bin/helper").resolve()))
             self.assertEqual(depth.uri, "2bc5/0403@1/2")
 
     def test_invalid_schema_names_fields_and_path_types_raise_clear_value_error(self):
