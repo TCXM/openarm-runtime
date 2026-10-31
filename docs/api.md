@@ -152,3 +152,30 @@ pixels remain black. This function does not start capture or require a web serve
 `serve(capture, host="127.0.0.1", port=5003)` binds first, starts the group, blocks
 serving HTTP and always closes it on exit. Use `create_app` for an existing application
 that already owns capture; use `serve` for a standalone single-process server.
+
+
+## Tactile
+
+`openarm_tactile` exports `TactileReader`, `Sample`, `SENSOR` (PXSR-STDIP03A) and
+`POINT_COUNT` (68). Importing these names loads no serial SDK, GUI or hardware.
+Install the `tactile` extra for acquisition; the `viewer` extra is only needed
+for `openarm-runtime tactile` visualization.
+
+`TactileReader(device=None, simulate=False, baudrate=921600, device_id=1)` is
+passive until `start()` or context entry. Supply exactly one of a serial path
+or `simulate=True`. The supported board is a single-channel serial converter;
+module ID is independent of the Linux serial-port number. The validated devices
+use ID 2. Hardware reads are bounded and use exclusive POSIX serial ownership.
+
+`snapshot()` returns `state`, `error`, `sample`, `sequence`, `age_s` and `rate_hz`.
+Only consume a sample as live when `state == "live"`; states also include
+`waiting`, `stale` (older than 0.5 s), `error` and `closed`. The frozen `Sample`
+contains an XYZ `resultant` tuple and 68 XYZ `forces` tuples. Values are raw counts:
+Fx/Fy are signed and Fz is unsigned. Resultant and distribution are separate
+transactions, not a synchronized sensor frame. No calibration or hardware writes
+are performed; acquisition is limited to 60 Hz.
+
+Failures retain the previous sample as invalid and close the port. `restart()`
+explicitly reconnects an already-started reader; no failure falls back to
+simulation. `close()` joins the worker with a 3 s bound, reports failure and is
+idempotent after cleanup. A closed reader cannot be started again.

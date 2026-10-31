@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.5.0 — 2026-10-31
+
+- Add the optional `openarm_tactile` capture API and `tactile` extra, pinning the
+  external community Paxini SDK. Core imports remain hardware-passive and free
+  of GUI/serial dependencies. SDK sources and coordinate data are not vendored.
+- Add `openarm-runtime tactile` for IP-M2324-Core 68-point serial sensors, with
+  explicit device ID, independent capture, stale/error state, manual reconnect
+  and bounded shutdown. Raw force counts are not calibrated newtons.
+- Add a left-arm dual-sensor workspace with 3D force views, point readouts, curves
+  and independent controls. Preserve the browser-confirmed sensor order; both
+  sensors belong to the left arm and the right arm has no tactile sensor.
+- Add explicit software simulation, external workstation configuration and
+  installed-package regression coverage. Previously documented dual-sensor
+  hardware trials observed pressure responses and no capture errors; release
+  checks are offline and do not move motors or open tactile hardware.
+
 ## 0.4.0 — 2026-10-31
 
 - Dual-arm following with independent CAN workers, all-arm preflight, coordinated

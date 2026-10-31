@@ -51,7 +51,7 @@ uv pip install --no-build-isolation-package openarm-can "${OPENARM_RUNTIME_ROOT}
 
 For a wheel, replace the last argument with
 `'/path/to/openarm_runtime-0.4.0-py3-none-any.whl[follower]'`. You can also use
-`'openarm-runtime[follower] @ git+https://github.com/TCXM/openarm-runtime.git@v0.4.0'`.
+`'openarm-runtime[follower] @ git+https://github.com/TCXM/openarm-runtime.git@v0.5.0'`.
 Consumers do not inherit a dependency repository's uv build settings, so retain
 the explicit build configuration and `--no-build-isolation-package` option.
 

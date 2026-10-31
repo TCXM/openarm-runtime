@@ -3,7 +3,11 @@
 - OpenArm CAN1.4.1: `https://github.com/enactic/openarm_can`, pinned revision
   `bfd4e52194aefe38389fa6e670be3738136facb9`. Used as a dependency, not vendored.
 - Feetech Servo SDK1.0.0: `https://pypi.org/project/feetech-servo-sdk/`;
-  PySerial3.5: `https://pypi.org/project/pyserial/`. Installed only with leader extra.
+  PySerial3.5: `https://pypi.org/project/pyserial/`. Installed with the leader extra.
+- Paxini SDK0.1.0 (MIT): `https://github.com/Jingyi-Z/paxini-sdk`, pinned revision
+  `79c82145f88e158dd7706736e8c07f14f11cbd7a`. Community SDK installed with the
+  tactile extra; SDK code and sensor coordinates are not vendored. PySerial3.5
+  is also installed with this extra.
 - Video extra: opencv-python-headless4.13.0.92 (Apache2.0 upstream), NumPy2.5.4
   (BSD3-Clause), Flask3.1.3 (BSD3-Clause), installed as dependencies, not vendored.
 - Astra Pro depth uses caller-provided Orbbec OpenNI2 headers, library and drivers.
