@@ -11,6 +11,8 @@ Use Python3.12 and uv. `uv sync --locked` installs an editable core package;
 For UI development, add `--extra viewer --extra leader` to `uv sync`.
 For RGB/depth capture and the camera web interface, use `--extra video`; run
 `openarm-runtime video --simulate` for offline browser development.
+For tactile capture, use `--extra tactile`; add `--extra viewer` for visualization.
+`openarm-runtime tactile --simulate` uses software data without opening serial ports.
 Native follower setup is documented in [workstation setup](docs/workstation.md).
 
 When developing the runtime together with another application, install this

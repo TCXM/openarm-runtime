@@ -46,6 +46,18 @@ jobs:
           cd "$RUNNER_TEMP"
           "$RUNNER_TEMP/runtime-test/bin/python" -I -m unittest discover -s "$GITHUB_WORKSPACE/tests" -p 'test_video*.py'
           "$RUNNER_TEMP/runtime-test/bin/python" "$GITHUB_WORKSPACE/examples/read_video.py" --help
+      - name: Test optional tactile SDK from installed wheel
+        env:
+          OPENARM_EXPECT_INSTALLED: '1'
+        run: |
+          "$RUNNER_TEMP/runtime-test/bin/python" - <<'PYCODE'
+          from pathlib import Path
+          import subprocess, sys
+          wheel = next(Path('dist').glob('*.whl')).resolve()
+          subprocess.run([sys.executable, '-m', 'pip', 'install', str(wheel) + '[tactile]'], check=True)
+          PYCODE
+          cd "$RUNNER_TEMP"
+          "$RUNNER_TEMP/runtime-test/bin/python" -I -m unittest discover -s "$GITHUB_WORKSPACE/tests" -p 'test_tactile.py'
       - uses: actions/upload-artifact@v4
         with:
           name: distributions-${{ matrix.os }}

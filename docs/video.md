@@ -8,7 +8,7 @@ configuration and context-managed lifecycle. Python3.12 is required.
 
 ```sh
 # Pinned release:
-python -m pip install "openarm-runtime[video] @ git+https://github.com/TCXM/openarm-runtime.git@v0.4.0"
+python -m pip install "openarm-runtime[video] @ git+https://github.com/TCXM/openarm-runtime.git@v0.5.0"
 # Or develop this checkout:
 python -m pip install -e ".[video]"
 # Alternatively, for this repository's uv workflow:
