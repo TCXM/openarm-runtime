@@ -51,4 +51,4 @@ ssh -N -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -L 127.0.0.1:8888:1
 
 安装示例固定在 v0.6.0；开发分支可能增加不同功能。Python API 接入应固定版本。参见 [变更记录](https://github.com/TCXM/openarm-runtime/blob/v0.6.0/CHANGELOG.md)、[验证记录](https://github.com/TCXM/openarm-runtime/blob/v0.6.0/docs/validation.md) 和 [问题反馈](https://github.com/TCXM/openarm-runtime/issues)。
 
-本套文档保存在仓库 `docs/wiki/`，README 顶部提供入口。文档随代码审查和维护；升级版本时同步核对安装标签、命令参数和 API 契约。
+在线阅读：[GitHub Wiki](https://github.com/TCXM/openarm-runtime/wiki)。本目录保留文档源文件，README 顶部提供 Wiki 入口。文档随代码审查和维护；升级版本时同步核对安装标签、命令参数和 API 契约。
