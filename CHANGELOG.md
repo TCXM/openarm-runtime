@@ -1,13 +1,15 @@
 # Changelog
 
-## Unreleased
+## 0.3.0 — 2026-10-31
 
 - Add independent `openarm_video` package and `video` extra, with passive imports,
   configurable RGB/OpenNI2 sources, timestamped frames, device leases, reconnect
   lifecycle, and explicit software-only simulation.
 - Add `openarm-runtime video`, packaged four-view assets, Safari-compatible finite
   JPEG/PNG requests and raw millimetre-depth download. The vendor SDK and machine
-  configuration remain outside the package; no existing service is migrated.
+  configuration remain outside the package.
+- Fix depth/profile test path comparisons on macOS and let Linux/macOS CI jobs
+  complete independently.
 
 ## 0.2.0 — 2026-10-31
 

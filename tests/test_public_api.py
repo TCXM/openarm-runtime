@@ -28,7 +28,7 @@ print(openarm_runtime.__version__)
         with tempfile.TemporaryDirectory() as root:
             result = subprocess.run([sys.executable, "-I", "-c", script], cwd=root,
                                     capture_output=True, text=True, check=True)
-        self.assertEqual(result.stdout.strip(), "0.2.0")
+        self.assertEqual(result.stdout.strip(), "0.3.0")
 
     def test_cli_works_outside_checkout(self):
         with tempfile.TemporaryDirectory() as root:
@@ -47,7 +47,7 @@ print(openarm_runtime.__version__)
         import openarm_runtime
         from importlib.metadata import version
         self.assertIn("site-packages", Path(openarm_runtime.__file__).parts)
-        self.assertEqual(version("openarm-runtime"), "0.2.0")
+        self.assertEqual(version("openarm-runtime"), "0.3.0")
 
     def test_video_resources_are_present_outside_source_tree(self):
         from importlib.resources import files
