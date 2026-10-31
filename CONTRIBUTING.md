@@ -9,6 +9,8 @@ New optional features should not add heavy dependencies to core imports.
 Use Python3.12 and uv. `uv sync --locked` installs an editable core package;
 `uv run --locked python -m unittest discover -s tests` runs offline regressions.
 For UI development, add `--extra viewer --extra leader` to `uv sync`.
+For RGB/depth capture and the camera web interface, use `--extra video`; run
+`openarm-runtime video --simulate` for offline browser development.
 Native follower setup is documented in [workstation setup](docs/workstation.md).
 
 When developing the runtime together with another application, install this

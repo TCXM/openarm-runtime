@@ -1,7 +1,7 @@
 # OpenArm Runtime
 
 A small Python toolkit for **OpenArm follower control, Feetech leader readout,
-and optional Viser interfaces**. Use the Python API in your own application, or
+RGB/depth video capture, and optional browser interfaces**. Use the Python API in your own application, or
 the CLI for live inspection and user-operated control.
 
 Python 3.12 · MIT · Linux SocketCAN for followers · Independent community project
@@ -24,6 +24,7 @@ pip install "openarm-runtime[leader,viewer] @ git+https://github.com/TCXM/openar
 Extras compose freely:
 - `leader`: Feetech SDK + PySerial for STS3215 buses.
 - `viewer`: Viser + URDF/mesh loading.
+- `video`: OpenCV headless + NumPy + Flask; independent of Viser, leaders and CAN.
 - `follower`: official OpenArm CAN SDK 1.4.1 and its build dependencies.
 
 The follower extra requires a Linux machine and the matching native C++ SDK.
@@ -143,10 +144,67 @@ Servers bind to loopback. For a remote robot, forward ports with SSH and open
 ssh -N -L 8890:127.0.0.1:8890 -L 8891:127.0.0.1:8891 your-workstation
 ```
 
+## Video capture and the four-view browser
+
+Video is available on this development branch; install this checkout rather than
+an older release tag:
+
+```sh
+python -m pip install -e ".[video]"
+# No cameras or vendor SDK required; clearly labelled SIMULATION.
+openarm-runtime video --simulate --port 5004
+```
+
+For hardware, copy [video.example.json](video.example.json) outside the repository
+and replace its placeholder device paths. USB `by-id` paths or stable udev aliases
+are preferable to `/dev/videoN`. The Astra Pro depth source needs an external
+Orbbec OpenNI2 SDK and our compiled helper; see [video setup](docs/video.md).
+
+```sh
+openarm-runtime video --profile ~/.config/openarm/video.json --port 5003
+# On your client computer:
+ssh -N -L 5003:127.0.0.1:5003 your-workstation
+```
+
+Open `http://127.0.0.1:5003`. One process owns all configured cameras and the web
+server; no separate RGB/depth servers are required. Stop other applications that
+own these devices before starting hardware capture. Packaging tests do not stop
+or replace already-running services.
+
+The white/blue interface includes simultaneous views, single-view/fullscreen,
+mirror, pause, per-camera status, depth colour range and raw 16-bit depth download.
+Each browser request returns one JPEG/PNG, avoiding Safari's MJPEG Fetch failures
+and long-connection limits. Images are independent observations, not synchronized
+RGB-D pairs or calibrated registration.
+
+The library works without a browser:
+
+```python
+import time
+from openarm_video import CameraConfig, VideoCapture
+
+configs = [CameraConfig("head", device="/dev/v4l/by-id/YOUR_CAMERA-video-index0")]
+with VideoCapture(configs) as capture:
+    while True:
+        frame, error, count = capture.snapshot("head")
+        if frame is not None and not error and frame.fresh(time.monotonic()):
+            print(frame.image.shape, frame.pixel_format, count)  # NumPy BGR image.
+        time.sleep(0.1)
+```
+
+Use `CameraReader` for one source, `OpenCVCamera`/`OpenNIDepthCamera` for synchronous
+reads, and `create_app(capture)` to embed the UI in an application that already
+owns capture. Importing `openarm_video` loads no OpenCV, Flask or vendor SDK and
+opens no hardware. [Video API](docs/api.md#video) · [setup](docs/video.md) ·
+[runnable example](examples/read_video.py).
+
 ## Integrate without a browser
 
 The public API consists of:
 
+- `openarm_video`: `CameraConfig`, `Frame`, `CameraReader`, `VideoCapture`,
+  `OpenCVCamera`, `OpenNIDepthCamera`, `load_cameras`, `build_depth_helper`,
+  `encode_frame`, `create_app`, `serve`.
 - `openarm_leader`: `LeaderBus`, `LeaderReader`, `Sample`, `Mapping`.
 - `openarm_runtime`: `Profile`, `hold_arm`, `calibrate_arm`, `ArmConnection`, `MotorState`, `MotorRange`.
 

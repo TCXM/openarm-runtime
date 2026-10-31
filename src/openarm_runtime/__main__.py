@@ -32,7 +32,35 @@ def main():
         command.add_argument("--port", type=int, default=8890)
         if name == "panel":
             command.add_argument("--report-root", type=Path, required=True)
+    video = commands.add_parser("video", help="Read RGB/depth cameras in one browser page")
+    video.add_argument("--profile", type=Path, help="External JSON camera configuration")
+    video.add_argument("--simulate", action="store_true", help="Software images only; never open cameras")
+    video.add_argument("--port", type=int, default=5003)
     args = parser.parse_args()
+    if args.command == "video":
+        if not 1024 <= args.port <= 65535:
+            parser.error("Port must be 1024..65535")
+        if args.profile is None and not args.simulate:
+            parser.error("video requires --profile or explicit --simulate")
+        from openarm_video import VideoCapture, load_cameras, serve as serve_video
+        from openarm_video.profile import simulation_cameras
+        try:
+            configs = load_cameras(args.profile) if args.profile else simulation_cameras()
+            capture = VideoCapture(configs, simulate=args.simulate)
+        except (OSError, ValueError, TypeError) as exc:
+            parser.error(str(exc))
+
+        def shutdown_video(signum, frame):
+            raise KeyboardInterrupt(f"Signal {signum}")
+
+        previous = signal.signal(signal.SIGTERM, shutdown_video)
+        try:
+            serve_video(capture, port=args.port)
+        except KeyboardInterrupt:
+            pass
+        finally:
+            signal.signal(signal.SIGTERM, previous)
+        return
     if args.command == "prepare":
         from openarm_viewer.model import prepare
         prepare(args.asset_root)

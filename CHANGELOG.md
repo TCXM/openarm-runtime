@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- Add independent `openarm_video` package and `video` extra, with passive imports,
+  configurable RGB/OpenNI2 sources, timestamped frames, device leases, reconnect
+  lifecycle, and explicit software-only simulation.
+- Add `openarm-runtime video`, packaged four-view assets, Safari-compatible finite
+  JPEG/PNG requests and raw millimetre-depth download. The vendor SDK and machine
+  configuration remain outside the package; no existing service is migrated.
+
 ## 0.2.0 — 2026-10-31
 
 - Final whole-arm zero convergence corrects drift after intermediate zero moves;

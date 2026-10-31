@@ -1,5 +1,27 @@
 # Hardware validation
 
+## Video library extraction (2026-10-31)
+
+- Added `openarm_video` with optional dependencies and the shared runtime CLI.
+  Passive-import tests reject socket, process and worker-thread creation and
+  confirm that NumPy, OpenCV, Flask and unrelated hardware SDKs stay unloaded.
+- Built wheel and sdist, including browser assets, the native adapter source and
+  the source distribution's example profile. No vendor binaries are bundled.
+- In a fresh Python3.12 environment outside the checkout, the core-only wheel
+  passed 96 of111 tests, with15 optional-dependency/external-asset skips. Adding
+  the wheel's `video` extra passed110 of111 tests; only external model assets
+  were skipped. Imports originated in site-packages; `pip check` passed.
+- WebKitGTK2.52.6 ran two simultaneous simulated four-camera pages for26 seconds,
+  with100 layout changes and10 pause/resume clicks per page. The2635 HTTP
+  requests had no unexpected HTTP/fetch errors (intentional cancellation excluded);
+  decoded image hashes changed for each camera on each page.
+  This exercises the Safari-compatible finite-request design, but is not a test
+  on the user's Safari installation or a physical-camera acceptance run.
+- The public build API compiled the depth adapter against the workstation's
+  external matched Orbbec SDK without opening a device. Extraction verification
+  did not change firmware, start a robot controller or migrate the live cameras
+  to this library. Existing standalone hardware evidence remains separate.
+
 ## Standalone package extraction (2026-10-31)
 
 This repository is the extracted package, not the original research checkout.

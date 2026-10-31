@@ -18,9 +18,11 @@ class PublicApiTests(unittest.TestCase):
         script = """
 import sys
 from unittest.mock import patch
-with patch('socket.socket', side_effect=AssertionError('opened socket')):
-    import openarm_runtime, openarm_leader
-assert not any(n in sys.modules for n in ('viser', 'numpy', 'serial', 'scservo_sdk', 'openarm_can', 'openarm_viewer'))
+with patch('socket.socket', side_effect=AssertionError('opened socket')), \
+     patch('subprocess.Popen', side_effect=AssertionError('started process')), \
+     patch('threading.Thread.start', side_effect=AssertionError('started thread')):
+    import openarm_runtime, openarm_leader, openarm_video
+assert not any(n in sys.modules for n in ('viser', 'numpy', 'serial', 'scservo_sdk', 'openarm_can', 'openarm_viewer', 'cv2', 'flask'))
 print(openarm_runtime.__version__)
 """
         with tempfile.TemporaryDirectory() as root:
@@ -32,8 +34,13 @@ print(openarm_runtime.__version__)
         with tempfile.TemporaryDirectory() as root:
             result = subprocess.run([sys.executable, "-I", "-m", "openarm_runtime", "--help"],
                                     cwd=root, capture_output=True, text=True, check=True)
-        for command in ("prepare", "leader", "check", "view", "panel", "calibrate"):
+        for command in ("prepare", "leader", "check", "view", "panel", "calibrate", "video"):
             self.assertIn(command, result.stdout)
+        with tempfile.TemporaryDirectory() as root:
+            help_result = subprocess.run([sys.executable, "-I", "-m", "openarm_runtime", "video", "--help"],
+                                         cwd=root, capture_output=True, text=True, check=True)
+        self.assertIn("--simulate", help_result.stdout)
+        self.assertIn("--profile", help_result.stdout)
 
     @unittest.skipUnless(os.environ.get("OPENARM_EXPECT_INSTALLED"), "Wheel-only validation")
     def test_validation_uses_installed_wheel_not_checkout(self):
@@ -41,6 +48,19 @@ print(openarm_runtime.__version__)
         from importlib.metadata import version
         self.assertIn("site-packages", Path(openarm_runtime.__file__).parts)
         self.assertEqual(version("openarm-runtime"), "0.2.0")
+
+    def test_video_resources_are_present_outside_source_tree(self):
+        from importlib.resources import files
+        root = files("openarm_video")
+        for name in ("static/index.html", "static/viewer.js", "native/depth_capture.cpp"):
+            self.assertTrue(root.joinpath(name).is_file(), name)
+        self.assertIn("/frame/", root.joinpath("static/viewer.js").read_text())
+
+    def test_video_cli_rejects_missing_profile_without_starting_devices(self):
+        result = subprocess.run([sys.executable, "-I", "-m", "openarm_runtime", "video"],
+                                capture_output=True, text=True)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("--profile", result.stderr)
 
     def test_unconfirmed_mapping_never_opens_bus(self):
         with patch("openarm_runtime.control.ClassicBus") as factory:

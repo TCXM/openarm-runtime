@@ -106,3 +106,49 @@ passive estimator. No GUI, native SDK or bus is loaded/opened merely by import.
 The names documented here are the supported integration surface. Other modules
 are implementation details. During0.x, pin a release tag or commit; incompatible
 API changes will be called out in the changelog and receive a minor-version bump.
+
+## Video
+
+`CameraConfig(name, device="", kind="rgb", width=640, height=480, fps=30, ...)`
+contains only configuration. RGB uses an explicit device path; depth uses
+`depth_helper` and optional OpenNI `uri`. Paired `preview_width`/`preview_height`
+affect JPEG previews only. `load_cameras(path)` loads a tuple from an external
+`{"cameras": [...]}` JSON profile. See [video setup](video.md).
+
+`Frame(image, received_at, sequence=0, pixel_format="bgr8")` contains a NumPy image
+and monotonic receive time. RGB is H×W×3 uint8 BGR (`bgr8`); depth is H×W uint16
+millimetres (`depth_mm`), where0 means invalid. `fresh(now, max_age=3)` rejects stale
+or future timestamps. Images are owned by the source and shared by consumers;
+treat them as read-only and copy before changing them.
+
+`OpenCVCamera(config)` and `OpenNIDepthCamera(config)` open synchronous sources.
+`read()` returns a `Frame`; use a context manager or `close()` for cleanup. Depth
+requires the caller's Linux OpenNI2 helper. `build_depth_helper(include_dir,
+library_dir, output)` compiles our bundled source against an external matched SDK,
+without opening hardware. Missing video dependencies produce an actionable error.
+
+`CameraReader(config, stale_after=3, retry_interval=1)` is passive until `start()` or
+context entry, then reads/reconnects in a background worker. `snapshot()` returns
+`(frame_or_none, error, count)`. A retained frame after an error is not a live sample:
+check both `not error` and `frame.fresh(time.monotonic())`. `status()` provides state,
+error, count, dimensions, kind, simulation flag and frame age. `close()` is
+idempotent after successful cleanup; failed cleanup is reported. A closed reader
+cannot be restarted; create another instance.
+
+`VideoCapture(configs, simulate=False, stale_after=3)` owns named readers.
+Constructing opens nothing. `start()`/context entry starts them; `close()` attempts
+to close all readers even if one fails. `snapshot(name)` returns the reader tuple;
+`status()` maps names to status dictionaries. `simulate=True` explicitly generates
+software RGB/depth frames and never accesses devices. An optional
+`source_factory(config)` supplies a custom source implementing `read()` and
+idempotent, bounded `close()` (useful for offline tests). The reader owns and
+closes the returned source.
+
+`encode_frame(frame, raw=False, near=0.3, far=4)` returns `(bytes, MIME type)` for
+JPEG RGB or PNG depth. Raw depth is unchanged; preview bounds are metres and invalid
+pixels remain black. This function does not start capture or require a web server.
+
+`create_app(capture)` returns a Flask app without starting/closing its capture group.
+`serve(capture, host="127.0.0.1", port=5003)` binds first, starts the group, blocks
+serving HTTP and always closes it on exit. Use `create_app` for an existing application
+that already owns capture; use `serve` for a standalone single-process server.

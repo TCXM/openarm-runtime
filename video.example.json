@@ -1,0 +1,8 @@
+{
+  "cameras": [
+    {"name": "head", "device": "/dev/v4l/by-id/HEAD_RGB-video-index0", "width": 640, "height": 480, "fps": 30},
+    {"name": "depth", "kind": "depth", "depth_helper": "~/.cache/openarm-video/astra-depth-capture", "width": 640, "height": 480, "fps": 30},
+    {"name": "left", "device": "/dev/LEFT_WRIST", "width": 1280, "height": 720, "fps": 60, "preview_width": 960, "preview_height": 540},
+    {"name": "right", "device": "/dev/RIGHT_WRIST", "width": 1280, "height": 720, "fps": 60, "preview_width": 960, "preview_height": 540}
+  ]
+}
