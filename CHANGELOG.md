@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Simplify the standalone camera viewer with a primary head view, compact RGB
+  views, responsive mobile layout, per-view status and browser update FPS.
+  Preview settings and optional depth views are collapsed by default.
+
 ## 0.4.0 — 2026-10-31
 
 - Dual-arm following with independent CAN workers, all-arm preflight, coordinated

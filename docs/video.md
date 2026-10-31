@@ -21,6 +21,14 @@ a synchronous camera, or starting/entering a reader/capture group.
 
 ## Profiles
 
+The standalone browser viewer presents a large `head` RGB view beside the other
+RGB feeds on desktop, and stacks them on phones. Depth is hidden from the default
+grid: select it from the view menu or enable it in the collapsed preview settings.
+Each card shows connection state and browser update FPS (not sensor capture FPS).
+Pause, fullscreen, single-camera view and automatic reconnect are available;
+hidden browser tabs suspend preview requests. Pausing the browser does not stop
+the caller-owned capture service.
+
 Copy `video.example.json` to a caller-owned configuration directory and set real
 paths. Each entry has a unique `name`, `kind` (`rgb` or `depth`), resolution and
 FPS. RGB uses `device`; optional paired `preview_width`/`preview_height` resize
