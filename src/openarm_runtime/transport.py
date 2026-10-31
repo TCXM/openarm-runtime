@@ -194,3 +194,15 @@ class ClassicBus:
         else:
             raise ValueError("Unknown motor command")
         self.send(packet.send_can_id, packet.data)
+
+    def set_zero(self, mid, expected_position):
+        """Explicit calibration-only write; disabled state checked again here."""
+        state = self.state(mid)
+        if (state.motor_id != mid or state.status != 0 or state.frame_format != "classic"
+                or not state.fresh(time.monotonic())
+                or not all(math.isfinite(x) for x in (expected_position, state.position, state.velocity))
+                or abs(state.position-expected_position) > math.radians(0.5)
+                or abs(state.velocity) > 0.08):
+            raise RuntimeError(f"ID{mid}: zero write requires stationary disabled motor")
+        packet = self.sdk.CanPacketEncoder.create_set_zero_command(self.motors[mid])
+        self.send(packet.send_can_id, packet.data)

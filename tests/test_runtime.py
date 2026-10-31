@@ -103,30 +103,41 @@ class RuntimeTests(unittest.TestCase):
         result = subprocess.run([sys.executable, "-m", "openarm_runtime", "--help"],
                                 cwd=Path(__file__).resolve().parents[1],
                                 capture_output=True, text=True, check=True)
-        self.assertIn("prepare,leader,check,view,panel", result.stdout)
+        self.assertIn("prepare,leader,check,calibrate,view,panel", result.stdout)
 
     def test_per_joint_sliders_bind_to_correct_motor(self):
         from openarm_runtime.panel import attach
         handles = {}
         class Handle:
-            def __init__(self, label, **kwargs):
-                self.value = kwargs.get("initial_value")
+            def __init__(self, label, options=None, **kwargs):
+                self.value = kwargs.get("initial_value", options[0] if options else None)
                 handles[label] = self
             def on_click(self, callback):
                 self.callback = callback
+                return callback
             on_update = on_click
-        gui = SimpleNamespace(add_folder=lambda *args: nullcontext(),
+        gui = SimpleNamespace(add_folder=lambda *args, **kwargs: nullcontext(),
                               add_markdown=Handle, add_slider=Handle,
-                              add_checkbox=Handle, add_button=Handle)
+                              add_checkbox=Handle, add_button=Handle, add_dropdown=Handle)
         server = SimpleNamespace(gui=gui, on_client_disconnect=lambda fn: fn)
         with patch("openarm_runtime.panel.MotionSession") as factory:
             session = factory.return_value
             attach(server, Profile("can1", "can0"), {}, "/unused")
             session.start.assert_not_called()
+
+            for side, label in (("left", "左臂"), ("right", "右臂")):
+                handles["机械臂"].value = label
+                handles["开始标定"].callback(
+                    SimpleNamespace(client=SimpleNamespace(client_id=42)))
+                self.assertEqual(session.start.call_args.args[:2], (42, side))
+                self.assertIs(session.start.call_args.args[3], True)
+                self.assertEqual(session.start.call_args.kwargs, {"calibration": True})
+            session.start.reset_mock()
             for side, label in (("right", "右臂"), ("left", "左臂")):
+                handles["机械臂"].value = label
                 for mid in range(1, 9):
-                    name = f"J{mid}" if mid < 8 else "夹爪 ID8"
-                    slider = handles[f"{label} {name} 目标偏移 (°)"]
+                    name = f"J{mid}" if mid < 8 else "夹爪"
+                    slider = handles[f"{name} 偏移 (°)"]
                     slider.value = 1.2
                     slider.callback(SimpleNamespace(client=SimpleNamespace(client_id=42)))
                     self.assertEqual(session.set_target.call_args.args, (42, side, mid, 1.2))

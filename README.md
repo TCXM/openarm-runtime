@@ -15,10 +15,10 @@ python3.12 -m venv .venv
 source .venv/bin/activate
 
 # Core: state types, software mapping and control API; no GUI or hardware SDK.
-pip install "openarm-runtime @ git+https://github.com/TCXM/openarm-runtime.git@v0.1.0"
+pip install "openarm-runtime @ git+https://github.com/TCXM/openarm-runtime.git@v0.2.0"
 
 # Serial leader readout, with a browser-based virtual robot.
-pip install "openarm-runtime[leader,viewer] @ git+https://github.com/TCXM/openarm-runtime.git@v0.1.0"
+pip install "openarm-runtime[leader,viewer] @ git+https://github.com/TCXM/openarm-runtime.git@v0.2.0"
 ```
 
 Extras compose freely:
@@ -39,7 +39,7 @@ project's environment. With uv, declare and lock the dependency directly:
 
 ```sh
 # Run in your own Python 3.12 project.
-uv add "openarm-runtime[leader,viewer] @ git+https://github.com/TCXM/openarm-runtime.git@v0.1.0"
+uv add "openarm-runtime[leader,viewer] @ git+https://github.com/TCXM/openarm-runtime.git@v0.2.0"
 ```
 
 **Modify the runtime while developing your application:** clone the source
@@ -148,7 +148,7 @@ ssh -N -L 8890:127.0.0.1:8890 -L 8891:127.0.0.1:8891 your-workstation
 The public API consists of:
 
 - `openarm_leader`: `LeaderBus`, `LeaderReader`, `Sample`, `Mapping`.
-- `openarm_runtime`: `Profile`, `hold_arm`, `ArmConnection`, `MotorState`, `MotorRange`.
+- `openarm_runtime`: `Profile`, `hold_arm`, `calibrate_arm`, `ArmConnection`, `MotorState`, `MotorRange`.
 
 `hold_arm(profile, side)` owns preflight, bus locking, enable and exit cleanup.
 Your application owns the control loop and supplies relative targets to
@@ -158,15 +158,25 @@ Your application owns the control loop and supplies relative targets to
 Configuration, calibration, assets and logs are explicit paths owned by the caller.
 No research repository, sibling checkout, or running web server is required.
 
+## Automatic follower calibration
+
+Select an arm and **自动标定** in the panel to perform single-arm
+stop-based calibration and hardware zero writes over Classic CAN. The same
+operation is available through `calibrate --side left|right --report-root PATH`
+and `calibrate_arm()`. Both arms completed zero writes and one power-cycle
+readback test on the development rig; quantified accuracy and repeatability are
+not yet established. Read the [operator guide](docs/calibration.md) for the
+required starting pose, motion sequence, stop behavior and partial-write recovery.
+
 ## Scope
 
 The working baseline covers eight motors per follower arm, Classic CAN,
 whole-arm hold/relative targets, two STS3215 leader buses and virtual pose mapping.
-Control currently uses validated fixed gains, ±30° relative offsets and
+Manual control uses validated fixed gains, ±30° relative offsets and
 0.1–5°/s target speed. See [validation](docs/validation.md) for measured evidence.
 
-Full leader-to-follower physical teleoperation, collision avoidance, absolute
-hardware calibration and long-term reliability are future work. Firmware encoding
+Full leader-to-follower physical teleoperation, collision avoidance, quantified
+calibration accuracy and long-term reliability are future work. Firmware encoding
 ranges are not mechanical joint limits. Software cleanup cannot replace a physical
 stop mechanism when a process or connection fails.
 

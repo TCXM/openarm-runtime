@@ -26,20 +26,21 @@ print(openarm_runtime.__version__)
         with tempfile.TemporaryDirectory() as root:
             result = subprocess.run([sys.executable, "-I", "-c", script], cwd=root,
                                     capture_output=True, text=True, check=True)
-        self.assertEqual(result.stdout.strip(), "0.1.0")
+        self.assertEqual(result.stdout.strip(), "0.2.0")
 
     def test_cli_works_outside_checkout(self):
         with tempfile.TemporaryDirectory() as root:
             result = subprocess.run([sys.executable, "-I", "-m", "openarm_runtime", "--help"],
                                     cwd=root, capture_output=True, text=True, check=True)
-        self.assertIn("prepare,leader,check,view,panel", result.stdout)
+        for command in ("prepare", "leader", "check", "view", "panel", "calibrate"):
+            self.assertIn(command, result.stdout)
 
     @unittest.skipUnless(os.environ.get("OPENARM_EXPECT_INSTALLED"), "Wheel-only validation")
     def test_validation_uses_installed_wheel_not_checkout(self):
         import openarm_runtime
         from importlib.metadata import version
         self.assertIn("site-packages", Path(openarm_runtime.__file__).parts)
-        self.assertEqual(version("openarm-runtime"), "0.1.0")
+        self.assertEqual(version("openarm-runtime"), "0.2.0")
 
     def test_unconfirmed_mapping_never_opens_bus(self):
         with patch("openarm_runtime.control.ClassicBus") as factory:

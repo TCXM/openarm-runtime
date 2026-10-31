@@ -83,6 +83,24 @@ error in an application.
 operation; a readable non-MIT value is always rejected. Keep the default unless
 your hardware has been separately verified for this behavior.
 
+## Automatic follower calibration (v0.2.0)
+
+`calibrate_arm(profile, side, *, cancelled, record, publish, progress,
+allow_unreadable_mode=False)` synchronously performs a complete single-arm v2
+calibration and writes hardware zeros. `side` is `left` or `right`. It owns the
+bus lease, preflight, enable, motion and disable; stop any reader first.
+
+It returns `{motor_id: raw_zero_radians}` for IDs1–8 (the pre-write encoder frame).
+`cancelled()` defaults to false; `record(event)`, `publish(states)` and
+`progress(message)` default to no-ops. For real operation, supply a durable
+`record`, such as `openarm_runtime.report.Report(...).record`, and a cancellation
+callback. The CLI and panel already provide both. Callback exceptions abort the
+operation; callbacks must not block the control loop. Errors may occur after
+partial hardware writes. No automatic rollback is attempted.
+
+See [calibration](calibration.md) before calling: this is a motion API, not a
+passive estimator. No GUI, native SDK or bus is loaded/opened merely by import.
+
 ## Compatibility
 
 The names documented here are the supported integration surface. Other modules

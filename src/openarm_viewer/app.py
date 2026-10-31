@@ -6,7 +6,7 @@ import math
 import time
 from pathlib import Path
 
-from .model import REVISION, joint_configuration, load_model
+from .model import joint_configuration, load_model
 from .scene import check_port, create_scene
 from openarm_runtime.telemetry import IDS, STATUS, ArmConnection, model_ready
 
@@ -47,7 +47,7 @@ def serve(asset_root: Path, left: str, right: str, port: int, frame_format: str 
         if control_profile:
             from openarm_runtime.panel import attach
             control_session, refresh_controls = attach(server, control_profile, connections, report_root)
-        with server.gui.add_folder("完整双臂 · 状态显示"):
+        with server.gui.add_folder("显示设置", expand_by_default=False):
             server.gui.add_markdown(
                 (f"控制映射：左臂 `{left}`，右臂 `{right}`。模型显示不代表已校准零位。"
                  if control_profile else
@@ -71,7 +71,7 @@ def serve(asset_root: Path, left: str, right: str, port: int, frame_format: str 
             )
         panels = {}
         for iface, connection in connections.items():
-            with server.gui.add_folder(f"{iface} · 独立链路"):
+            with server.gui.add_folder(f"诊断 · {iface}", expand_by_default=False):
                 status = server.gui.add_markdown("等待只读配置检查…")
                 metadata = server.gui.add_markdown("")
                 reconnect = server.gui.add_button(f"重新连接 {iface}（只读）")
@@ -91,7 +91,7 @@ def serve(asset_root: Path, left: str, right: str, port: int, frame_format: str 
                     finally:
                         button.disabled = False
 
-        with server.gui.add_folder("电机详情 · 16个电机"):
+        with server.gui.add_folder("电机详情", expand_by_default=False):
             selected = server.gui.add_dropdown(
                 "电机", tuple(f"{iface}/ID{i}" for iface in (left, right) for i in IDS)
             )
@@ -105,11 +105,6 @@ def serve(asset_root: Path, left: str, right: str, port: int, frame_format: str 
                     "数据年龄 / 状态 / 帧类型",
                 )
             }
-        server.gui.add_markdown(
-            f"官方 OpenArm v2 · `{REVISION[:12]}`\n\n"
-            "状态轮询只读；程序不自动修改通信参数。\n\n"
-            "某臂任一J1–J7过期0.4秒即隐藏该臂，另一臂继续。参考夹爪还要求ID8新鲜。"
-        )
         for connection in connections.values():
             connection.restart()
         print(f"{title} http://127.0.0.1:{port} · {left} / {right}", flush=True)
@@ -131,8 +126,8 @@ def serve(asset_root: Path, left: str, right: str, port: int, frame_format: str 
                             visuals[side].get_actuated_joint_names(), states, side, gripper_mode
                         )
                         visuals[side].update_cfg(np.asarray(cfg))
-                    labels[side].text = f"{side} ← {iface} · " + (
-                        "实时（映射未校准）" if complete else "缺失 / 过期，臂已隐藏"
+                    labels[side].text = ("左臂" if side == "left" else "右臂") + (
+                        "" if complete else " · 无反馈"
                     )
                 for iface, (states, error, message, responses, missed) in snapshots.items():
                     fresh = {i for i, state in states.items() if state.fresh(now)}

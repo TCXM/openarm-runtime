@@ -115,10 +115,30 @@ checks that changed encoder inputs update both model configurations without a pr
 override. Workstation tests after this correction: all52 passed. Voltage-only alarms
 are also tested separately from corrupt/short reads and combined fault bits.
 
+## Automatic calibration acceptance — 2026-10-31
+
+One OpenArm v2 rig with stock grippers, Classic 1 Mbps and SDK1.4.1 completed
+operator-started calibration on both arms. Right: 138.88 s; left: 126.12 s.
+Each report contains eight stop solutions, simultaneous final-zero settling,
+verified whole-arm disable, eight verified hardware zero writes and completion.
+Reports and machine-specific offsets remain outside the repository.
+
+With the arms kept in place, a user power-cycled motor power. Fresh readbacks
+from all 16 motors exactly matched their pre-cycle encoder values (maximum
+absolute value about 0.033 degrees). All motors remained disabled and can_br4.
+This validates persistence on this rig, not absolute mechanical zero accuracy.
+
+During the outage, active polling left both host links in ERROR-WARNING with
+nonzero TX error counters. Cycling host links alone did not clear them. Bounded
+read-only can_br queries confirmed the configuration, successful transmissions
+reduced counters to zero, and the standard Classic checks passed. The read-only
+panel was restarted. Automatic outage recovery is not yet accepted.
+
 ## Remaining follower work
 
-Hardware zero/sign calibration, gripper transmission mapping, quantified accuracy,
+Independent sign/geometry verification, gripper transmission mapping, quantified accuracy,
 collision-aware joint limits and long-running/disconnect robustness are not accepted.
-Calibration prototypes are archived for future review rather than exposed as a
-verified operator workflow. Continue new real-machine validation through explicit
+Calibration repeatability and multi-pose precision remain unmeasured; see
+[calibration](calibration.md).
+Continue new real-machine validation through explicit
 user actions; the SDK's protocol range is not a mechanical safe-contact limit.

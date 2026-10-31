@@ -21,6 +21,10 @@ def main():
     leader.add_argument("--asset-root", type=Path, required=True)
     leader.add_argument("--port", type=int, default=8890)
     commands.add_parser("check", help="Read-only: verify both Classic buses and disabled motors")
+    calibration = commands.add_parser("calibrate", help="Move one v2 arm, find stops and write hardware zeros (experimental)")
+    calibration.add_argument("--side", choices=("left", "right"), required=True)
+    calibration.add_argument("--report-root", type=Path, required=True)
+    calibration.add_argument("--allow-unreadable-mode", action="store_true")
     for name, help_text in (("view", "Read-only live viewer"),
                             ("panel", "User-operated whole-arm control; startup is read-only")):
         command = commands.add_parser(name, help=help_text)
@@ -48,8 +52,36 @@ def main():
             signal.signal(signal.SIGTERM, previous)
         return
     if args.config is None:
-        parser.error("--config is required for check, view and panel")
+        parser.error("--config is required for check, view, panel and calibrate")
     profile = Profile.load(args.config)
+    if args.command == "calibrate":
+        from datetime import datetime, timezone
+        import threading
+        import uuid
+        from .calibration import calibrate_arm
+        from .report import Report
+        cancel = threading.Event()
+        previous = {sig: signal.signal(sig, lambda *_: cancel.set())
+                    for sig in (signal.SIGINT, signal.SIGTERM)}
+        report = None
+        try:
+            report = Report(args.report_root / (
+                datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")+"-"+uuid.uuid4().hex+".json"),
+                {"source": "cli_user", "action": "auto_calibrate", "side": args.side,
+                 "interface": profile.interface(args.side),
+                 "allow_unreadable_mode": args.allow_unreadable_mode})
+            print("Automatic v2 calibration: motion and zero writes. Ctrl+C stops. Report:", report.path, flush=True)
+            calibrate_arm(profile, args.side, cancelled=cancel.is_set, record=report.record,
+                          progress=lambda message: print(message, flush=True),
+                          allow_unreadable_mode=args.allow_unreadable_mode)
+        except BaseException as exc:
+            if report:
+                report.record({"event": "ended", "error": f"{type(exc).__name__}: {exc}"})
+            raise
+        finally:
+            for sig, handler in previous.items():
+                signal.signal(sig, handler)
+        return
     if args.command == "check":
         from .checks import check
         result = check(profile)

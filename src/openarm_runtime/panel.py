@@ -2,7 +2,6 @@
 
 from datetime import datetime, timezone
 from pathlib import Path
-import math
 import threading
 import time
 import uuid
@@ -13,6 +12,7 @@ from .transport import ClassicBus
 from .arm import ArmHold, FOLLOWER_KP, FOLLOWER_KD
 from .report import Report
 from .control import check_modes
+from .calibration import calibrate_arm
 
 
 class MotionSession:
@@ -29,13 +29,13 @@ class MotionSession:
         self.closed = False
         self.offsets = dict.fromkeys(IDS, 0.0)
         self.speed = 5.0
-        self.message = "未使能。点击整臂使能后保持当前位置，再拖动滑条。"
+        self.message = "待机 · 请选择机械臂和操作"
 
     @property
     def busy(self):
         return self.lock.locked()
 
-    def start(self, owner, side, supported, allow_unreadable):
+    def start(self, owner, side, supported, allow_unreadable, *, calibration=False):
         if not supported:
             raise ValueError("请先确认机械臂可进入使能保持")
         if not self.profile.mapping_verified:
@@ -47,9 +47,9 @@ class MotionSession:
         self.owner, self.side = owner, side
         with self.target_lock:
             self.offsets = dict.fromkeys(IDS, 0.0)
-        self.message = f"{interface}：只读预检，然后整臂使能…"
+        self.message = f"{'左臂' if side == 'left' else '右臂'} · 正在检查…"
         self.worker = threading.Thread(target=self._run,
-                                       args=(interface, allow_unreadable), daemon=True)
+                                       args=(interface, allow_unreadable, calibration), daemon=True)
         try:
             self.worker.start()
         except BaseException:
@@ -75,29 +75,38 @@ class MotionSession:
             if self.worker.is_alive():
                 raise RuntimeError("Control worker shutdown timed out")
 
-    def _run(self, interface, allow_unreadable):
+    def _run(self, interface, allow_unreadable, calibration=False):
         connection = self.connections[interface]
         report = None
         try:
             report = Report(self.report_root / (
                 datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ") + "-" + uuid.uuid4().hex + ".json"),
-                {"source": "viser_user", "action": "arm_hold", "interface": interface,
+                {"source": "viser_user", "action": "auto_calibrate" if calibration else "arm_hold", "interface": interface,
                  "kp": FOLLOWER_KP, "kd": FOLLOWER_KD, "allow_unreadable_mode": allow_unreadable})
             connection.close()
+
+            def publish(states):
+                with connection.shared.lock:
+                    connection.shared.states = dict(states)
+                    connection.shared.error = ""
+                    connection.shared.message = "自动标定 · Classic" if calibration else "整臂MIT位置保持 · 实时控制反馈"
+                    connection.shared.responses += len(states)
+                    connection.shared.rx_classic += len(states)
+
+            if calibration:
+                def progress(message):
+                    self.message = f"{interface} 自动标定：{message}"
+                calibrate_arm(self.profile, self.side, cancelled=self.cancel.is_set,
+                              record=report.record, publish=publish, progress=progress,
+                              allow_unreadable_mode=allow_unreadable)
+                self.message = "标定完成 · 零位已写入并验证，机械臂已失能"
+                return
             with bus_lease(interface, exclusive=True):
                 bus = ClassicBus(interface, self.profile.feedback_timeout_s)
                 try:
                     report.record({"event": "preflight", "motors": bus.preflight()})
                     modes = check_modes(bus, allow_unreadable, self.cancel.is_set)
                     report.record({"event": "modes", "readback": modes})
-
-                    def publish(states):
-                        with connection.shared.lock:
-                            connection.shared.states = dict(states)
-                            connection.shared.error = ""
-                            connection.shared.message = "整臂MIT位置保持 · 实时控制反馈"
-                            connection.shared.responses += len(states)
-                            connection.shared.rx_classic += len(states)
 
                     with ArmHold(bus, self.cancel.is_set, report.record, publish) as control:
                         self.ready = True
@@ -137,48 +146,64 @@ class MotionSession:
 
 def attach(server, profile, connections, report_root):
     session = MotionSession(profile, connections, report_root)
-    with server.gui.add_folder("整臂控制 · Classic 1 Mbps"):
+    stop = server.gui.add_button("停止 · 失能", color="red")
+    status = server.gui.add_markdown(session.message)
+    health = server.gui.add_markdown("正在连接…")
+    side_choice = server.gui.add_dropdown("机械臂", ("右臂", "左臂"))
+    mode = server.gui.add_dropdown("操作", ("自动标定", "手动控制"))
+    with server.gui.add_folder("标定") as calibration_folder:
         server.gui.add_markdown(
-            "先使能一条臂，8个电机保持当前角度；拖动滑条调整目标，松手后继续保持。"
-            "\n\n滑条为相对本次使能位置的±30°偏移，目标按限速平滑推进。"
-            "停止会失能整臂；断开操作浏览器也会停止。不会自动置零。")
-        speed = server.gui.add_slider("目标速度 (°/s)", min=0.1, max=5, step=0.1, initial_value=5.0)
-        supported = server.gui.add_checkbox("机械臂已就绪，可进入使能保持", initial_value=False)
-        unreadable = server.gui.add_checkbox("RID10不可读时按MIT协议试运行", initial_value=False)
-        stop = server.gui.add_button("停止并失能整臂", color="red")
-        status = server.gui.add_markdown(session.message)
-        server.gui.add_markdown(f"参考配置 Kp：`{list(FOLLOWER_KP)}`\n\nKd：`{list(FOLLOWER_KD)}`")
-    rows, enable_buttons = [], []
-    for side, label in (("right", "右臂"), ("left", "左臂")):
-        interface = profile.interface(side)
-        with server.gui.add_folder(f"{label} · {interface} · 关节滑条"):
-            enable = server.gui.add_button(f"使能{label}并保持当前位置")
-            enable_buttons.append(enable)
-            @enable.on_click
-            def begin(event, side=side):
-                if event.client is None:
-                    return
-                try:
-                    session.start(event.client.client_id, side, supported.value, unreadable.value)
-                    for row_side, _, _, _, _, slider in rows:
-                        if row_side == side:
-                            slider.value = 0.0
-                except Exception as exc:
-                    session.message = str(exc)
-            for mid in IDS:
-                name = f"J{mid}" if mid < 8 else "夹爪 ID8"
-                current = server.gui.add_markdown(f"**{name}** · 等待角度")
-                slider = server.gui.add_slider(f"{label} {name} 目标偏移 (°)",
-                                               min=-30, max=30, step=0.1, initial_value=0.0, disabled=True)
-                rows.append((side, interface, mid, name, current, slider))
-                @slider.on_update
-                def target(event, side=side, mid=mid, slider=slider):
-                    if event.client is None:
-                        return
+            "1. 将选中臂摆到[参考姿态](https://docs.openarm.dev/setup/openarm-setup/motor-config/#step-2-zero-position-calibration)。\n"
+            "2. 清空运动范围，准备在失能时支撑机械臂。\n"
+            "3. 勾选就绪，再点开始。\n\n"
+            "会自动运动并写入零位。")
+        calibration_ready = server.gui.add_checkbox("姿态已摆好，运动范围已清空", initial_value=False)
+        calibrate = server.gui.add_button("开始标定", disabled=True)
+    with server.gui.add_folder("手动控制", visible=False) as manual_folder:
+        server.gui.add_markdown("使能后保持当前位置；滑条调整相对角度。停止或断开操作页面会失能。")
+        supported = server.gui.add_checkbox("机械臂已就绪", initial_value=False)
+        enable = server.gui.add_button("使能并保持", disabled=True)
+        speed = server.gui.add_slider("速度 (°/s)", min=0.1, max=5, step=0.1, initial_value=5.0)
+        sliders = {}
+        for mid in IDS:
+            name = f"J{mid}" if mid < 8 else "夹爪"
+            slider = server.gui.add_slider(f"{name} 偏移 (°)", min=-30, max=30, step=0.1,
+                                           initial_value=0.0, disabled=True)
+            sliders[mid] = slider
+            @slider.on_update
+            def target(event, mid=mid, slider=slider):
+                if event.client is not None:
                     try:
-                        session.set_target(event.client.client_id, side, mid, slider.value)
+                        session.set_target(event.client.client_id, selected_side(), mid, slider.value)
                     except Exception as exc:
                         session.message = str(exc)
+
+    def selected_side():
+        return "left" if side_choice.value == "左臂" else "right"
+
+    @side_choice.on_update
+    @mode.on_update
+    def selection_changed(_event):
+        calibration_ready.value = supported.value = False
+
+    @calibrate.on_click
+    def begin_calibration(event):
+        if event.client is not None and mode.value == "自动标定":
+            try:
+                session.start(event.client.client_id, selected_side(), calibration_ready.value,
+                              True, calibration=True)
+            except Exception as exc:
+                session.message = str(exc)
+
+    @enable.on_click
+    def begin(event):
+        if event.client is not None and mode.value == "手动控制":
+            try:
+                session.start(event.client.client_id, selected_side(), supported.value, True)
+                for slider in sliders.values():
+                    slider.value = 0.0
+            except Exception as exc:
+                session.message = str(exc)
 
     @speed.on_update
     def speed_changed(event):
@@ -196,17 +221,23 @@ def attach(server, profile, connections, report_root):
 
     def refresh():
         status.content = session.message
-        for handle in (*enable_buttons, supported, unreadable):
+        for handle in (side_choice, mode, supported, calibration_ready):
             handle.disabled = session.busy
+        calibrate.disabled = session.busy or not calibration_ready.value
+        enable.disabled = session.busy or not supported.value
+        calibration_folder.visible = mode.value == "自动标定"
+        manual_folder.visible = mode.value == "手动控制"
         now = time.monotonic()
-        snapshots = {iface: conn.shared.snapshot()[0] for iface, conn in connections.items()}
-        for side, interface, mid, name, current, slider in rows:
-            state = snapshots[interface].get(mid)
-            if state is None:
-                current.content = f"**{name}** · 未收到反馈"
-            else:
-                age = "" if state.fresh(now) else "（反馈已过期）"
-                current.content = f"**{name}** · 当前 {math.degrees(state.position):+.2f}° {age}"
-            slider.disabled = not (session.ready and session.side == side)
+        summaries = []
+        for side, label in (("right", "右臂"), ("left", "左臂")):
+            states, error, *_ = connections[profile.interface(side)].shared.snapshot()
+            fresh = len(states) == 8 and all(s.fresh(now) for s in states.values())
+            text = "反馈中断" if error or not fresh else (
+                "电机故障" if any(s.status not in (0, 1) for s in states.values()) else
+                "已使能" if any(s.status == 1 for s in states.values()) else "未使能")
+            summaries.append(f"{label} · {text}")
+        health.content = " ｜ ".join(summaries)
+        for slider in sliders.values():
+            slider.disabled = not (session.ready and session.side == selected_side())
 
     return session, refresh
