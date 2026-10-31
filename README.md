@@ -6,7 +6,7 @@ the CLI for live inspection and user-operated control.
 
 Python 3.12 · MIT · Linux SocketCAN for followers · Independent community project
 
-**[中文使用文档 / Wiki](docs/wiki/Home.md)** · [常用命令](docs/wiki/CLI-Reference.md) · [Python API](docs/wiki/Python-API.md) · [Mac / Windows 远程访问](docs/wiki/Remote-Access.md)
+**[中文使用文档 / Wiki](https://github.com/TCXM/openarm-runtime/wiki/Home)** · [常用命令](https://github.com/TCXM/openarm-runtime/wiki/CLI-Reference) · [Python API](https://github.com/TCXM/openarm-runtime/wiki/Python-API) · [Mac / Windows 远程访问](https://github.com/TCXM/openarm-runtime/wiki/Remote-Access)
 
 ## Install only what you need
 
