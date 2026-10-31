@@ -11,6 +11,12 @@ Use Python3.12 and uv. `uv sync --locked` installs an editable core package;
 For UI development, add `--extra viewer --extra leader` to `uv sync`.
 Native follower setup is documented in [workstation setup](docs/workstation.md).
 
+When developing the runtime together with another application, install this
+checkout into that application's environment in editable mode. The checkout can
+live anywhere; no sibling-directory layout is required. See the README's
+[installation modes](README.md#using-the-package-vs-developing-it) for pip and
+uv commands, when to reinstall, and how to return to a pinned release.
+
 Tests must not open physical hardware. Test behavior at transport boundaries,
 including exception cleanup, rather than copying implementation details.
 Record actual hardware checks separately in [validation](docs/validation.md).

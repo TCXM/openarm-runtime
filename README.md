@@ -31,6 +31,48 @@ Follow [workstation setup](docs/workstation.md) before installing it. The core
 and leader APIs import without Viser; importing a module never opens hardware.
 Distribution is through GitHub tags and release artifacts, not PyPI.
 
+## Using the package vs developing it
+
+**Use a released version in an existing project:** no manual clone is needed.
+The installer fetches the tagged source and installs the package into your
+project's environment. With uv, declare and lock the dependency directly:
+
+```sh
+# Run in your own Python 3.12 project.
+uv add "openarm-runtime[leader,viewer] @ git+https://github.com/TCXM/openarm-runtime.git@v0.1.0"
+```
+
+**Modify the runtime while developing your application:** clone the source
+anywhere you like, then install it in editable mode into your application's
+activated Python 3.12 environment:
+
+```sh
+git clone https://github.com/TCXM/openarm-runtime.git /path/to/openarm-runtime
+python -m pip install -e "/path/to/openarm-runtime[leader,viewer]"
+```
+
+Replace `/path/to/openarm-runtime` with your chosen directory. It does not need
+to be inside or next to your application's repository. Editable installation
+makes imports use that checkout, so Python source edits take effect when you
+restart your application; you do not need to reinstall for each edit. Keep the
+checkout in place while using it. Dependency, entry-point or build changes may
+require reinstalling; native SDK changes require rebuilding the SDK.
+
+For a uv-managed application, use a local editable dependency so later `uv sync`
+commands preserve your development setup:
+
+```sh
+uv add --editable "/path/to/openarm-runtime[leader,viewer]"
+```
+
+This records a local source dependency. Before sharing or deploying the
+application, replace it with a published tag or commit using the versioned
+`uv add` command above and commit the updated dependency files. The `follower`
+extra still requires [native SDK setup](docs/workstation.md) in either mode.
+
+To develop the runtime on its own, use `uv sync --locked` in this repository;
+see [contributing](CONTRIBUTING.md).
+
 ## Read a leader in Python
 
 ```python
