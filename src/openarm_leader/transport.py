@@ -45,7 +45,7 @@ class LeaderBus:
         self.port.ser.reset_input_buffer()
         data, result, error = self.handler.readTxRx(self.port, mid, address, length)
         # A voltage-only alarm does not invalidate a complete, checksummed read
-        # for this virtual display. Other faults and transport failures still reject.
+        # for display or operator-approved following. Other faults/transport failures reject.
         if result != 0 or error & ~1 or len(data) != length:
             detail = self.handler.getRxPacketError(error) if error else ""
             voltage = f", {data[22] / 10:.1f} V" if address == 40 and len(data) >= 23 else ""

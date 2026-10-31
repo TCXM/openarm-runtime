@@ -13,8 +13,9 @@ FOLLOWER_KD = (1.5, 1.5, 3.0, 5.0, 0.3, 0.3, 0.3, 0.3)
 
 
 class ArmHold:
-    def __init__(self, bus, cancelled, record, publish):
+    def __init__(self, bus, cancelled, record, publish, *, tracking=False):
         self.bus, self.cancelled, self.record, self.publish = bus, cancelled, record, publish
+        self.tracking = tracking
         self.attempted = []
         self.states = {}
         self.base = {}
@@ -30,7 +31,7 @@ class ArmHold:
             raise RuntimeError("Non-finite feedback")
         if max(state.mos_temperature, state.rotor_temperature) >= 75:
             raise RuntimeError(f"ID{state.motor_id}: temperature limit")
-        if abs(state.velocity) > 2:
+        if not self.tracking and abs(state.velocity) > 2:
             raise RuntimeError(f"ID{state.motor_id}: velocity limit")
 
     def check_cancelled(self):
@@ -130,6 +131,26 @@ class ArmHold:
             if abs(effort) > 0.9 * self.bus.ranges[mid].torque:
                 raise RuntimeError(f"ID{mid}: predicted effort near firmware range; error={math.degrees(q-state.position):.2f}°")
             targets[mid] = q
+        self._exchange(targets, kp, kd)
+
+    def track(self, targets):
+        """Direct MIT position references; caller clips to robot joint limits.
+
+        Unlike the manual-slider tick, this has no software slew/offset cap or
+        inferred-effort rejection. The motor applies its MIT effort saturation.
+        """
+        if not self.tracking:
+            raise RuntimeError("Direct targets require a tracking session")
+        self.check_cancelled()
+        if set(targets) != set(IDS):
+            raise ValueError("All eight joint targets required")
+        for mid, goal in targets.items():
+            self.validate(self.states[mid])
+            if not math.isfinite(goal) or abs(goal) >= self.bus.ranges[mid].position:
+                raise ValueError(f"ID{mid}: target outside firmware range")
+        self._exchange(dict(targets), FOLLOWER_KP, FOLLOWER_KD)
+
+    def _exchange(self, targets, kp, kd):
         states = self.bus.exchange(targets, kp, kd)
         if set(states) != set(IDS):
             raise RuntimeError("Incomplete arm feedback")

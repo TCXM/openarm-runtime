@@ -20,6 +20,8 @@ def main():
     leader.add_argument("--calibration", type=Path, required=True)
     leader.add_argument("--asset-root", type=Path, required=True)
     leader.add_argument("--port", type=int, default=8890)
+    leader.add_argument("--follow", action="store_true", help="Add operator-started physical follower controls")
+    leader.add_argument("--report-root", type=Path)
     commands.add_parser("check", help="Read-only: verify both Classic buses and disabled motors")
     calibration = commands.add_parser("calibrate", help="Move one v2 arm, find stops and write hardware zeros (experimental)")
     calibration.add_argument("--side", choices=("left", "right"), required=True)
@@ -38,6 +40,8 @@ def main():
         prepare(args.asset_root)
         return
     if args.command == "leader":
+        if args.follow and (args.config is None or args.report_root is None):
+            parser.error("leader --follow requires --config and --report-root")
         if not 1024 <= args.port <= 65535:
             parser.error("Port must be 1024..65535")
         from openarm_leader.app import serve as serve_leader
@@ -47,7 +51,8 @@ def main():
 
         previous = signal.signal(signal.SIGTERM, shutdown_leader)
         try:
-            serve_leader(args.asset_root, args.left_port, args.right_port, args.calibration, args.port)
+            options = {"control_profile": Profile.load(args.config), "report_root": args.report_root} if args.follow else {}
+            serve_leader(args.asset_root, args.left_port, args.right_port, args.calibration, args.port, **options)
         finally:
             signal.signal(signal.SIGTERM, previous)
         return

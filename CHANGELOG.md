@@ -1,5 +1,25 @@
 # Changelog
 
+## Unreleased
+
+- Dual-arm following with independent CAN workers, all-arm preflight, coordinated
+  takeover, peer-fault cancellation and serialized reports. Single-arm selection remains.
+
+- Operator-approved voltage-only leader alarms are nonblocking during physical
+  following; stale/corrupt feedback, enabled leaders and other fault bits still stop.
+
+- Optional `leader --follow` adds operator-started physical following,
+  relative takeover, direct MIT targets with upstream joint-bound clipping,
+  65-degree gripper mapping, stop/disconnect cleanup and reports.
+  Hardware motion acceptance is pending; startup remains passive.
+- Following no longer inherits manual-slider slew/offset restrictions. Leader
+  calibration and diagnostics are collapsed by default in Viser.
+
+- Guided manual leader calibration in Viser: arm selection, stable natural-zero
+  and gripper endpoint capture, visible completeness/unsaved status and persistence.
+- Capture rejects moving, stale or enabled-leader feedback and retains previous
+  values on failure. Advanced direction/device controls remain available.
+
 ## 0.2.0 — 2026-10-31
 
 - Final whole-arm zero convergence corrects drift after intermediate zero moves;

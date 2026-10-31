@@ -109,6 +109,60 @@ openarm-runtime prepare --asset-root "$MODEL_ROOT"
 ```
 
 **Leader → virtual robot:** move a physical leader and inspect its mapped pose.
+
+The development panel provides manual calibration: select left/right/both, let
+the leader hang naturally and record its reference, capture open/closed gripper
+endpoints, then save. Each capture checks 0.7 seconds of stationary feedback;
+failed captures preserve the previous calibration. Saved settings load on restart.
+Direction and device assignment are under advanced settings. The virtual model
+shows joint changes relative to the reference, not the leader's physical pose.
+This software reference is separate from follower takeover alignment;
+the default page does not command physical followers or write leader servo registers.
+
+### Physical following (development preview)
+
+Add global `--config /path/to/classic.json` before `leader`, and add `--follow
+--report-root /external/reports` to its options. The page starts passive; choose
+left/right/both and click **开始跟随** to take over the current poses. Saved, complete
+leader calibration is required. Stop other follower viewers/panels first so
+the controller can acquire the exclusive CAN lease.
+
+The implementation follows one or both arms with direct MIT position targets,
+without the manual panel's 5°/s slew or ±30° takeover envelope. Start and restart
+sample fresh leader origins without modifying saved calibration. Gripper opening
+changes map to a 65-degree motor span relative to takeover; this is not a measured
+millimeter mapping. Targets clip to the side-specific joint ranges below.
+
+Reference: [Enactic unilateral follower control](https://github.com/enactic/openarm_teleop/blob/eb2d49338bf70ace95282ea724903849397b7811/src/controller/control.cpp)
+sends leader references to MIT control directly. [LeRobot OpenArm configuration](https://github.com/huggingface/lerobot/blob/408e0ca763658f9294ef816d2b07f7d281ddeeb0/src/lerobot/robots/openarm_follower/config_openarm_follower.py)
+defaults `max_relative_target` to `None` and supplies these joint bounds (degrees):
+J1 ±75, J2 left −90…9/right −9…90, J3 ±85, J4 0…135, J5 ±85,
+J6 ±40, J7 ±80, gripper 65-degree span. Our calibrated left gripper opens
+positive (0…65); the right opens negative (−65…0). This motor-coordinate
+adaptation differs from LeRobot's normalized negative gripper bounds.
+
+Neither source establishes a universal maximum physical speed. Runtime keeps
+the existing MIT gains and Classic transport, and sends current references at
+the configured control rate (20 Hz on the workstation). Tracking does not apply
+the manual-hold 2 rad/s feedback cutoff or predicted-effort rejection; motor MIT
+effort saturation still applies. Fault, temperature, finite-value and fresh-feedback
+checks remain active. Manual slider control retains its original limits.
+
+The main page expands following controls; calibration and advanced diagnostics
+are collapsed by default and can be expanded when needed.
+
+Voltage-only leader alarms on fresh valid feedback are informational and do not
+interrupt following (operator-approved); their voltage remains visible in diagnostics.
+Stop, owning-browser disconnect, stale leader feedback, other/combined leader
+alarms, and control failures terminate the session and attempt
+verified whole-arm disable. Support the arm when stopping. The virtual model
+continues to show the leader mapping, not measured follower geometry. Runtime
+reports are diagnostic samples, not a synchronized training dataset. Simultaneous
+dual-arm following uses one worker per CAN bus: both preflights finish before
+either enables, each arm remains serviced while its peer ramps, and both leader
+origins are captured when both holds are ready. A fault on either side cancels
+both loops and each arm verifies disable independently. Report writes are serialized.
+Dual-arm physical motion acceptance remains pending.
 This mode reads serial buses only; it does not command follower hardware.
 
 ```sh
@@ -175,7 +229,7 @@ whole-arm hold/relative targets, two STS3215 leader buses and virtual pose mappi
 Manual control uses validated fixed gains, ±30° relative offsets and
 0.1–5°/s target speed. See [validation](docs/validation.md) for measured evidence.
 
-Full leader-to-follower physical teleoperation, collision avoidance, quantified
+Dual-arm physical motion acceptance, collision avoidance, quantified
 calibration accuracy and long-term reliability are future work. Firmware encoding
 ranges are not mechanical joint limits. Software cleanup cannot replace a physical
 stop mechanism when a process or connection fails.

@@ -6,9 +6,10 @@
   CAN SDK. Load optional dependencies only in the operation that needs them.
 - Follower hardware uses Linux SocketCAN Classic 1 Mbps, official CAN SDK1.4.1.
   Keep validated gains, limits, firmware range decoding and disable cleanup intact.
-- Leader reads never write servo registers; voltage-only alarms on otherwise valid
-  feedback remain nonblocking for virtual display. Do not transfer this exception
-  into physical follower control without a separate decision.
+- Leader reads never write servo registers. Per the operator's explicit 2026-10-31
+  decision, voltage-only alarms on fresh valid feedback are nonblocking for both
+  virtual display and physical following. Other/combined fault bits, corrupt or
+  stale feedback and enabled leaders still reject physical following.
 - Do not run real motor movement for packaging or refactoring verification. Use
   offline tests, installed-wheel tests and explicit user-operated real-machine trials.
 - Do not commit machine profiles, calibration, credentials, logs, models, SDK builds

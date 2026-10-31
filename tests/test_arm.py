@@ -47,6 +47,27 @@ class FakeBus:
 
 
 class ArmTests(unittest.TestCase):
+    def test_tracking_sends_direct_targets_without_manual_limits(self):
+        bus = FakeBus()
+        with patch("openarm_runtime.arm.time.sleep"):
+            with ArmHold(bus, lambda: False, Mock(), Mock(), tracking=True) as arm:
+                arm.states[3] = replace(arm.states[3], velocity=3.0)
+                targets = dict.fromkeys(IDS, 0.0)
+                targets[3] = math.radians(60)
+                arm.track(targets)
+                self.assertEqual(bus.last_targets, targets)
+                with self.assertRaises(ValueError):
+                    arm.track(targets | {3: float("nan")})
+        self.assertFalse(bus.enabled)
+
+    def test_tracking_still_stops_on_feedback_loss(self):
+        bus = FakeBus()
+        with patch("openarm_runtime.arm.time.sleep"), self.assertRaisesRegex(RuntimeError, "Incomplete"):
+            with ArmHold(bus, lambda: False, Mock(), Mock(), tracking=True) as arm:
+                bus.exchange = lambda *args: {1: bus.state(1)}
+                arm.track(dict.fromkeys(IDS, 0.0))
+        self.assertFalse(bus.enabled)
+
     def test_partial_enable_disables_every_attempted_motor(self):
         bus = FakeBus()
         bus.fail_enable = 4

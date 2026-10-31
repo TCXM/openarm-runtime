@@ -10,6 +10,7 @@ from unittest.mock import Mock, MagicMock, patch
 from types import SimpleNamespace, ModuleType
 
 from openarm_leader.mapping import Mapping, SOURCE_IDS, delta
+from openarm_leader.calibration import collect_stable
 from openarm_leader.transport import LeaderBus, Reader, Sample, validate_read_packet
 
 
@@ -19,6 +20,31 @@ def packet(mid=1, instruction=2, params=(56, 2)):
 
 
 class LeaderTests(unittest.TestCase):
+    def capture_fixture(self, position, kind="zero", frozen=False, torque=0):
+        now = [10.0]
+        def snapshot():
+            t = now[0]
+            return Sample(tuple(position(t)), (torque,) * 8, 10 if frozen else t, 0.01), "", 1
+        reader = SimpleNamespace(snapshot=snapshot)
+        def sleep(dt):
+            now[0] += dt
+        return collect_stable({"left": reader}, kind, clock=lambda: now[0], sleep=sleep)
+
+    def test_stable_capture_handles_encoder_wrap(self):
+        captured = self.capture_fixture(lambda t: ((4095 if int(t * 50) % 2 else 0),) * 8)
+        self.assertIn(captured["left"].positions[0], (4095, 0))
+
+    def test_capture_rejects_movement_frozen_feedback_and_enabled_servos(self):
+        for kwargs in ({"position": lambda t: (int((t - 10) * 100),) * 8},
+                       {"position": lambda t: (2048,) * 8, "frozen": True},
+                       {"position": lambda t: (2048,) * 8, "torque": 1}):
+            with self.assertRaises(ValueError):
+                self.capture_fixture(**kwargs)
+
+    def test_endpoint_capture_checks_gripper_not_arm_motion(self):
+        captured = self.capture_fixture(lambda t: (int((t - 10) * 100),) * 7 + (100,), kind="open")
+        self.assertEqual(captured["left"].positions[7], 100)
+
     def test_viewer_follows_changed_samples_without_a_freeze_preview_control(self):
         from openarm_leader.app import serve
         server = MagicMock()
