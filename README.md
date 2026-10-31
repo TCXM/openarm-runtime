@@ -6,6 +6,10 @@
 当前版本 `0.1.0`，Python 3.12。真实从臂运行要求 Linux SocketCAN。
 本地独立 Git 仓库，尚未发布到 GitHub / PyPI。
 
+`bimanual_tactile` 通过 `code/hardware` 集成环境依赖本包；两个仓库采用同级目录。
+该环境的 `runtime-revision` 固定所需提交，`sync.sh` 核对版本后安装非editable包。
+底层修改和测试统一在本仓库进行，更新研究项目时显式更新它的版本锁。
+
 ## 安装
 
 在其他项目的虚拟环境中按需安装，`OPENARM_RUNTIME_ROOT` 指向本仓库：

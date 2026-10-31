@@ -7,11 +7,16 @@ reader/mapping/UI, simplified live-follow interface and nonblocking voltage-only
 alarm behavior. It is not a claim that all extracted content was in that commit.
 
 This repository is a separate local Git repository, not a nested repository or
-submodule of the research project. The first extraction preserves the original
-research checkout and workstation service as the current operational copy; their
-dependency cutover is a later explicit step. Do not maintain both implementations
-indefinitely: after cutover, new bottom-layer development belongs here and research
-projects depend on a pinned package version/revision.
+submodule of the research project. After the initial extraction, the user approved
+the consumer cutover: `bimanual_tactile/code/hardware` becomes an installation/config
+entry point with a pinned dependency, and its duplicate source/tests are removed.
+Both repositories use sibling checkouts locally and on the workstation. The consumer
+records the required revision in `runtime-revision`; its installer rejects a different
+or dirty runtime checkout. New bottom-layer development belongs here.
+
+Pre-cutover source and machine configuration are archived outside both repositories.
+The existing external SDK prefix, model assets, machine profile and calibration remain
+the inputs of the installed package, rather than being moved into source control.
 
 Extraction changes:
 - Installable `src/` package with optional leader/follower/viewer dependencies.
