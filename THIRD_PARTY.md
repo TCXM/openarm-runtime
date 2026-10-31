@@ -12,5 +12,5 @@
   into this repository. Protocol facts and retained validation are documented in
   docs/validation.md.
 
-Upstream packages/assets retain their own licenses. This initial local extraction
-does not select a public license for the project's own source.
+Upstream packages/assets retain their own licenses; the MIT license in this
+repository covers this project's own source, not those separate dependencies.

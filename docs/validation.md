@@ -18,8 +18,10 @@ Historical `code/hardware` paths below refer to the source project at validation
   not replace/restart the active workstation service. The new lifecycle adapter is
   covered with mode-rejection, passive-import and exception-cleanup tests.
 - Physical validation below remains the original hardware evidence. A package build
-  is not new real-machine acceptance; the original project will switch dependencies
-  in a subsequent step.
+  is not new real-machine acceptance. The consumer subsequently switched to the
+  installed package and repeated all59 tests successfully. Read-only checks passed
+  on both CAN buses (16 motors disabled), with150 complete samples per leader bus.
+  Separate Chrome checks loaded both leader and follower interfaces successfully.
 
 ## Working baseline
 

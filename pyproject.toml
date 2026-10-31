@@ -7,8 +7,17 @@ name = "openarm-runtime"
 version = "0.1.0"
 description = "Reusable OpenArm Classic CAN control, Feetech leader readout and optional Viser tools"
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE", "THIRD_PARTY.md"]
+authors = [{name = "Yuxiao Zhu"}]
+keywords = ["robotics", "openarm", "socketcan", "feetech", "viser"]
 requires-python = ">=3.12,<3.13"
 dependencies = []
+
+[project.urls]
+Repository = "https://github.com/TCXM/openarm-runtime"
+Issues = "https://github.com/TCXM/openarm-runtime/issues"
+Changelog = "https://github.com/TCXM/openarm-runtime/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 leader = ["feetech-servo-sdk==1.0.0", "pyserial==3.5"]

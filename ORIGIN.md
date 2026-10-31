@@ -33,4 +33,6 @@ source layout and new public adapters are separately validated; no new physical
 motion acceptance is implied by packaging tests.
 
 No machine calibration, credentials, live reports, SDK binaries, model meshes or
-the ignored reference `openarm/` repository are included. No GitHub remote is created.
+the ignored reference `openarm/` repository are included. The initial extraction
+was local-only; the owner subsequently approved public GitHub distribution under
+the MIT license at `https://github.com/TCXM/openarm-runtime`.

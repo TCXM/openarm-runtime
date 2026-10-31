@@ -1,11 +1,13 @@
 # Linux workstation installation
 
-Python3.12、uv、Git、CMake和C++编译工具。主臂/Viser安装只需README中的extras，
-本页的C++流程仅用于真实从臂。SDK和模型放仓库外；不自动配置CAN或运行电机。
+Requirements: Python3.12, uv, Git, CMake and a C++ toolchain. Serial leader and
+Viser users only need the extras in the README; the native build below is for
+follower control. Keep SDK and model installations outside the source repository.
 
-## 官方SDK构建
+## Build the official SDK
 
-已有工作站可以复用已验证安装前缀；新机器按以下固定版本构建：
+Reuse a verified existing installation, or build these pinned revisions on a new
+Linux workstation:
 
 ```sh
 export DEPS="$HOME/robot_deps"
@@ -30,13 +32,15 @@ cmake --build "$DEPS/openarm_can/build" --parallel 4
 cmake --install "$DEPS/openarm_can/build"
 ```
 
-在本仓库根目录执行 `sh sync.sh` 安装全部extras。脚本先安装构建依赖，然后显式
-传入nanobind路径、C++前缀和RPATH，再构建Python绑定。`uv.lock`固定依赖。
-不要移动C++安装前缀；更换它后重新构建绑定。
+Run `sh sync.sh` at this repository's root to install all extras. It installs
+build dependencies first, then passes the nanobind path, native SDK prefix and
+RPATH to the Python binding build. `uv.lock` pins dependencies. If you move the
+native installation prefix, rebuild the bindings.
 
-## 在其他项目安装从臂extra
+## Install the follower extra in another project
 
-以下命令在调用方已激活的Python3.12虚拟环境执行：
+In your application's activated Python3.12 virtual environment, set
+`OPENARM_RUNTIME_ROOT` to a checkout of a release tag, then run:
 
 ```sh
 uv pip install nanobind==2.10.2 scikit-build-core==1.1.1
@@ -45,28 +49,34 @@ export CMAKE_BUILD_PARALLEL_LEVEL=4
 uv pip install --no-build-isolation-package openarm-can "${OPENARM_RUNTIME_ROOT}[follower]"
 ```
 
-应用于wheel时，将最后参数换为 `'/path/to/openarm_runtime-0.1.0-py3-none-any.whl[follower]'`。
-普通pip/uv不会继承依赖仓库的uv构建选项，因此调用方也需要上述构建配置。
+For a wheel, replace the last argument with
+`'/path/to/openarm_runtime-0.1.0-py3-none-any.whl[follower]'`. You can also use
+`'openarm-runtime[follower] @ git+https://github.com/TCXM/openarm-runtime.git@v0.1.0'`.
+Consumers do not inherit a dependency repository's uv build settings, so retain
+the explicit build configuration and `--no-build-isolation-package` option.
 
-离线验证：
+Verify the installation without opening hardware:
 
 ```sh
 python -c 'import openarm_runtime, openarm_can; print(openarm_runtime.__version__, openarm_can.__version__)'
 uv pip check
 ```
 
-## 配置与运行
+## Configure and run
 
-- 从 `classic.example.json` 开始，外部配置指定左右CAN接口。物理对应确认后设置
-  `mapping_verified=true`；新机器不能沿用其他机器的左右判断。
-- 当前验证配置：Classic1 Mbps、FD关闭、restart-ms0，电机can_br4；工具检查而不重配。
-- 主臂使用两条稳定串口路径，外部JSON保存软件参考位置和夹爪端点。
-- 串口权限由操作系统提供。临时ACL拔插后可能丢失；长期使用按适配器唯一序列号
-  编写限定设备的udev规则，指定实际用户，避免给所有串口放开权限。
-- 远程Viser使用SSH转发，服务只监听loopback：
-  `ssh -N -L 127.0.0.1:8890:127.0.0.1:8890 workstation`。
-- 后台服务应将stdout/stderr重定向到外部日志，避免SSH关闭后残留进程输出阻塞。
-  停止服务使用SIGTERM；命令行Ctrl+C也会执行对应清理。
+- Start from `classic.example.json`, stored outside the repository. Set the two
+  interfaces and `mapping_verified=true` after checking physical left/right wiring.
+- Validated links: Classic1 Mbps, FD off, restart-ms0; motor can_br4. Commands
+  inspect this configuration rather than changing it automatically.
+- Use stable serial device paths for leaders. Software origins and gripper
+  endpoints are saved in an external calibration JSON file.
+- Serial access is managed by the OS. Temporary ACLs may disappear on unplug;
+  persistent udev rules should target each adapter's unique serial and actual user.
+- Forward loopback Viser with SSH:
+  `ssh -N -L 127.0.0.1:8890:127.0.0.1:8890 workstation`.
+- Redirect background service stdout/stderr to external logs. Stop with SIGTERM
+  or Ctrl+C so cleanup runs. Closing an SSH tunnel does not stop a remote service.
 
-迁移期间原研究仓库仍可能运行。不要同时启动两个真实从臂控制器或两个同串口主臂
-reader；保留了与原版本共用的CAN锁目录，但它不能约束第三方程序。
+Run one serial reader per device and one controller per CAN bus. The shared CAN
+lock namespace interoperates with the original research installation, but cannot
+coordinate unrelated third-party controllers.
