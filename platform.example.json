@@ -1,0 +1,76 @@
+{
+  "port": 8888,
+  "services": {
+    "control": {
+      "port": 8893,
+      "command": [
+        "{python}",
+        "-m",
+        "openarm_runtime",
+        "--config",
+        "~/.config/openarm/classic.json",
+        "panel",
+        "--asset-root",
+        "~/.cache/openarm-models",
+        "--report-root",
+        "~/openarm-reports",
+        "--port",
+        "8893"
+      ]
+    },
+    "teleop": {
+      "port": 8890,
+      "command": [
+        "{python}",
+        "-m",
+        "openarm_runtime",
+        "--config",
+        "~/.config/openarm/classic.json",
+        "leader",
+        "--left-port",
+        "/dev/serial/by-id/YOUR_LEFT_LEADER",
+        "--right-port",
+        "/dev/serial/by-id/YOUR_RIGHT_LEADER",
+        "--calibration",
+        "~/.config/openarm/leader.json",
+        "--asset-root",
+        "~/.cache/openarm-models",
+        "--follow",
+        "--report-root",
+        "~/openarm-reports",
+        "--port",
+        "8890"
+      ]
+    },
+    "tactile": {
+      "port": 8891,
+      "command": [
+        "{python}",
+        "-m",
+        "openarm_runtime",
+        "tactile",
+        "--device",
+        "/dev/serial/by-id/YOUR_LEFT_TACTILE",
+        "--right-device",
+        "/dev/serial/by-id/YOUR_RIGHT_TACTILE",
+        "--device-id",
+        "2",
+        "--port",
+        "8891"
+      ]
+    },
+    "vision": {
+      "port": 5003,
+      "command": [
+        "{python}",
+        "-m",
+        "openarm_runtime",
+        "video",
+        "--profile",
+        "~/.config/openarm/video-runtime.json",
+        "--port",
+        "5003"
+      ]
+    }
+  }
+}

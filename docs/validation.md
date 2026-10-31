@@ -189,3 +189,84 @@ Calibration repeatability and multi-pose precision remain unmeasured; see
 [calibration](calibration.md).
 Continue new real-machine validation through explicit
 user actions; the SDK's protocol range is not a mechanical safe-contact limit.
+
+
+## Single-port platform acceptance — 2026-10-31
+
+The platform proxies control, teleoperation, tactile and video through one
+loopback address. Local validation covered 197 Python tests (two optional
+checks skipped), four Node frontend behavior tests, and a source/wheel build.
+A fresh core-only environment outside the checkout ran all 197 tests with
+16 optional-dependency checks skipped, including installed-resource assertions.
+
+A headless Chromium trial used actual Viser servers with software-only control
+fixtures, the existing dual-tactile document with two fixture viewers, and the
+video simulator. It exercised GUI events over WebSocket, sensing navigation
+while retaining the controller connection, control/teleoperation service
+switching in both directions, and four displayed camera frames. All 1,289 HTTP
+requests and five observed WebSocket connections used the single gateway
+address. No page JavaScript errors or off-origin module requests were observed.
+This trial did not open motor hardware.
+
+The local platform was then started against the workstation's configured
+services. A browser opened only tactile and vision: both real tactile viewers
+reported acquisition at about 59.8 Hz; head RGB and depth images displayed at
+640-pixel width. All 170 observed HTTP requests and both tactile WebSockets
+used the platform address, with no page JavaScript errors. Wrist cameras were
+disconnected. An independent controller was still listening on its configured
+endpoint, so it remained externally owned and physical teleoperation switching
+was not exercised. The configured leader serial adapters and saved runtime
+leader calibration were absent. Real following requires those prerequisites
+and an operator-run motion trial; software gateway acceptance does not claim
+physical tracking accuracy or hardware readiness.
+
+
+## Wrist-camera recovery — 2026-10-31
+
+A subsequent device-level check found both wrist UVC cameras enumerated and
+capable of acquisition. The earlier disconnected status came from missing
+`/dev/camera_wrist_*` aliases: their udev rules referenced an old USB topology.
+Both cameras reported the same serial identifier, so the external video profile
+was updated to distinct current topology paths, with the operator confirming
+left/right from captured images.
+
+The workstation's three legacy video processes were replaced by the packaged
+`openarm-runtime video --profile` service owned by the platform. Profile backups
+were retained outside Git. Head RGB, depth and both wrists all reported Online
+with empty capture errors. A short counter-based observation measured 30.0 fps
+for head RGB, 29.6 fps for depth, and 59.3 fps per wrist at 1280×720; HTTP wrist
+previews were 960×540. These are a short live observation, not a sustained
+throughput guarantee. Browser verification displayed all four real images and
+both tactile viewers through the one platform port, with no off-origin module
+requests or JavaScript errors. No motor controls were operated.
+
+
+## NiceGUI/aiohttp migration acceptance — 2026-10-31
+
+The platform dashboard now uses NiceGUI 3.18.0 on FastAPI/Uvicorn. Its HTTP,
+streaming and WebSocket proxy uses aiohttp 3.14.5. The optional `platform` extra
+keeps core imports passive. Source validation ran 212 Python tests with two
+optional checks skipped. A fresh core-only wheel installation outside the
+checkout ran 212 tests with 37 optional checks skipped; installing the platform
+extra then passed all 45 platform tests. Package builds and the locked dependency
+check passed. Coverage includes same-origin framework polling and WebSockets,
+request cancellation while switching services, binding before child startup,
+and preserving cleanup failures when Uvicorn re-raises a shutdown signal.
+
+A Chromium trial using actual NiceGUI and Viser with software control fixtures
+verified button events over WebSocket, retained controller iframe identity when
+visiting tactile/video, both nested tactile viewers, four video images, and
+confirmed control/teleoperation switches in both directions. All 732 observed
+HTTP requests and six WebSockets used the one gateway address, with no page
+JavaScript errors. A separate trial stopped that mock platform while controller
+and tactile connections were open: every owned service port closed within the
+0.45-second observation, with no ASGI exception trace. This timing is specific
+to software fixtures, not a claim about physical motor shutdown duration.
+
+After replacement of the local entry process, a read-only browser visit displayed
+both real tactile viewers and all four real camera images through port 8888.
+All 356 observed HTTP requests and three WebSockets stayed on that origin, with
+no page JavaScript errors. Short counter observations measured 30.0 fps for head
+RGB and depth, and 59.4 fps per wrist at 1280×720. Both tactile pages reported
+about 59.7 Hz. No motor movement was commanded. Existing external control-service
+ownership and the earlier physical-teleoperation validation limits still apply.
