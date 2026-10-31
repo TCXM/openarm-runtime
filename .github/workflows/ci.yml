@@ -10,6 +10,7 @@ permissions:
 jobs:
   wheel:
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
@@ -32,6 +33,19 @@ jobs:
           "$RUNNER_TEMP/runtime-test/bin/python" -I -m unittest discover -s "$GITHUB_WORKSPACE/tests"
           "$RUNNER_TEMP/runtime-test/bin/python" "$GITHUB_WORKSPACE/examples/read_leader.py" --help
           "$RUNNER_TEMP/runtime-test/bin/python" "$GITHUB_WORKSPACE/examples/read_follower.py" --help
+      - name: Test optional video from installed wheel
+        env:
+          OPENARM_EXPECT_INSTALLED: '1'
+        run: |
+          "$RUNNER_TEMP/runtime-test/bin/python" - <<'PY'
+          from pathlib import Path
+          import subprocess, sys
+          wheel = next(Path('dist').glob('*.whl')).resolve()
+          subprocess.run([sys.executable, '-m', 'pip', 'install', str(wheel) + '[video]'], check=True)
+          PY
+          cd "$RUNNER_TEMP"
+          "$RUNNER_TEMP/runtime-test/bin/python" -I -m unittest discover -s "$GITHUB_WORKSPACE/tests" -p 'test_video*.py'
+          "$RUNNER_TEMP/runtime-test/bin/python" "$GITHUB_WORKSPACE/examples/read_video.py" --help
       - uses: actions/upload-artifact@v4
         with:
           name: distributions-${{ matrix.os }}

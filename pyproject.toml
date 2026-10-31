@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "openarm-runtime"
-version = "0.2.0"
+version = "0.4.0"
 description = "Reusable OpenArm Classic CAN control, Feetech leader readout and optional Viser tools"
 readme = "README.md"
 license = "MIT"
@@ -22,6 +22,7 @@ Changelog = "https://github.com/TCXM/openarm-runtime/blob/main/CHANGELOG.md"
 [project.optional-dependencies]
 leader = ["feetech-servo-sdk==1.0.0", "pyserial==3.5"]
 viewer = ["viser[urdf]==1.1.1", "pycollada==0.9.3"]
+video = ["opencv-python-headless==4.13.0.92", "numpy==2.5.4", "Flask==3.1.3"]
 follower = [
   "openarm-can @ git+https://github.com/enactic/openarm_can.git@bfd4e52194aefe38389fa6e670be3738136facb9#subdirectory=python",
   "nanobind==2.10.2",
@@ -36,3 +37,6 @@ where = ["src"]
 
 [tool.uv]
 no-build-isolation-package = ["openarm-can"]
+
+[tool.setuptools.package-data]
+openarm_video = ["static/*.html", "static/*.js", "native/*.cpp"]

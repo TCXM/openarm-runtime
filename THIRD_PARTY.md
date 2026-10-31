@@ -4,6 +4,12 @@
   `bfd4e52194aefe38389fa6e670be3738136facb9`. Used as a dependency, not vendored.
 - Feetech Servo SDK1.0.0: `https://pypi.org/project/feetech-servo-sdk/`;
   PySerial3.5: `https://pypi.org/project/pyserial/`. Installed only with leader extra.
+- Video extra: opencv-python-headless4.13.0.92 (Apache2.0 upstream), NumPy2.5.4
+  (BSD3-Clause), Flask3.1.3 (BSD3-Clause), installed as dependencies, not vendored.
+- Astra Pro depth uses caller-provided Orbbec OpenNI2 headers, library and drivers.
+  Reference distribution: https://github.com/orbbec/ros2_astra_camera . No vendor
+  binary, SDK header, license grant or firmware is bundled. This package includes
+  only its own C++ adapter source; users must obtain an SDK under its own terms.
 - Viser1.1.1, yourdfpy and pycollada are optional visualization dependencies.
 - Official OpenArm description assets are downloaded into a caller-supplied cache
   and hash-verified; the asset preparation workflow retains upstream LICENSE.txt.

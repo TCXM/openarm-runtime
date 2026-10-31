@@ -1,5 +1,52 @@
 # Hardware validation
 
+## Leader calibration and dual-arm following — 2026-10-31
+
+The operator saved both natural-reference poses and gripper endpoints, then
+confirmed virtual left/right assignment and direction. The saved calibration
+reloads with complete references and valid endpoint spans.
+
+On the Classic v2 workstation, a single-arm follow trial ran for about 51 s after
+takeover. A subsequent dual-arm trial ran for about 54 s after coordinated
+takeover; both arms reported eight verified disables and no terminal error.
+The operator confirmed satisfactory operation. Reports remain outside Git:
+`teleop-2398ce95781b4d92895bc5f817fc1292.json` and
+`teleop-50f60cdd68ea4b2ba092d9b5e865ff54.json`.
+
+An earlier trial stopped on leader ID6's voltage-only 0x01 alarm at 3.9 V. The
+operator explicitly chose to treat voltage-only alarms on valid fresh feedback
+as nonblocking. Other/combined fault bits, stale feedback and enabled leaders
+remain rejected. This does not establish power-supply robustness.
+
+Offline regression covers wrap-aware stationary capture, direct targets and joint
+clipping, all-arm preflight before enable, continued holding during peer startup,
+peer-fault cancellation and cleanup. Tracking accuracy, synchronized training
+capture, measured full gripper travel, collision avoidance and long-running
+dual-arm operation are not quantified by these short trials. The video library
+from v0.3.0 remains independently usable; it is not yet synchronized with control.
+
+## Video library extraction (2026-10-31)
+
+- Added `openarm_video` with optional dependencies and the shared runtime CLI.
+  Passive-import tests reject socket, process and worker-thread creation and
+  confirm that NumPy, OpenCV, Flask and unrelated hardware SDKs stay unloaded.
+- Built wheel and sdist, including browser assets, the native adapter source and
+  the source distribution's example profile. No vendor binaries are bundled.
+- In a fresh Python3.12 environment outside the checkout, the core-only wheel
+  passed 96 of111 tests, with15 optional-dependency/external-asset skips. Adding
+  the wheel's `video` extra passed110 of111 tests; only external model assets
+  were skipped. Imports originated in site-packages; `pip check` passed.
+- WebKitGTK2.52.6 ran two simultaneous simulated four-camera pages for26 seconds,
+  with100 layout changes and10 pause/resume clicks per page. The2635 HTTP
+  requests had no unexpected HTTP/fetch errors (intentional cancellation excluded);
+  decoded image hashes changed for each camera on each page.
+  This exercises the Safari-compatible finite-request design, but is not a test
+  on the user's Safari installation or a physical-camera acceptance run.
+- The public build API compiled the depth adapter against the workstation's
+  external matched Orbbec SDK without opening a device. Extraction verification
+  did not change firmware, start a robot controller or migrate the live cameras
+  to this library. Existing standalone hardware evidence remains separate.
+
 ## Standalone package extraction (2026-10-31)
 
 This repository is the extracted package, not the original research checkout.

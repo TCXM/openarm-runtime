@@ -10,11 +10,11 @@ from .config import Profile
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--config", type=Path, help="Follower profile for check/view/panel")
+    parser.add_argument("--config", type=Path, help="Follower profile for check/view/panel/calibrate or leader --follow")
     commands = parser.add_subparsers(dest="command", required=True)
     prepare = commands.add_parser("prepare", help="Download and verify pinned model assets only")
     prepare.add_argument("--asset-root", type=Path, required=True)
-    leader = commands.add_parser("leader", help="Read physical leaders and drive virtual arms only")
+    leader = commands.add_parser("leader", help="Leader calibration and preview; optional operator-started physical following")
     leader.add_argument("--left-port", required=True)
     leader.add_argument("--right-port", required=True)
     leader.add_argument("--calibration", type=Path, required=True)
@@ -34,7 +34,35 @@ def main():
         command.add_argument("--port", type=int, default=8890)
         if name == "panel":
             command.add_argument("--report-root", type=Path, required=True)
+    video = commands.add_parser("video", help="Read RGB/depth cameras in one browser page")
+    video.add_argument("--profile", type=Path, help="External JSON camera configuration")
+    video.add_argument("--simulate", action="store_true", help="Software images only; never open cameras")
+    video.add_argument("--port", type=int, default=5003)
     args = parser.parse_args()
+    if args.command == "video":
+        if not 1024 <= args.port <= 65535:
+            parser.error("Port must be 1024..65535")
+        if args.profile is None and not args.simulate:
+            parser.error("video requires --profile or explicit --simulate")
+        from openarm_video import VideoCapture, load_cameras, serve as serve_video
+        from openarm_video.profile import simulation_cameras
+        try:
+            configs = load_cameras(args.profile) if args.profile else simulation_cameras()
+            capture = VideoCapture(configs, simulate=args.simulate)
+        except (OSError, ValueError, TypeError) as exc:
+            parser.error(str(exc))
+
+        def shutdown_video(signum, frame):
+            raise KeyboardInterrupt(f"Signal {signum}")
+
+        previous = signal.signal(signal.SIGTERM, shutdown_video)
+        try:
+            serve_video(capture, port=args.port)
+        except KeyboardInterrupt:
+            pass
+        finally:
+            signal.signal(signal.SIGTERM, previous)
+        return
     if args.command == "prepare":
         from openarm_viewer.model import prepare
         prepare(args.asset_root)

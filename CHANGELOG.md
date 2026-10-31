@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.0 — 2026-10-31
 
 - Dual-arm following with independent CAN workers, all-arm preflight, coordinated
   takeover, peer-fault cancellation and serialized reports. Single-arm selection remains.
@@ -11,7 +11,8 @@
 - Optional `leader --follow` adds operator-started physical following,
   relative takeover, direct MIT targets with upstream joint-bound clipping,
   65-degree gripper mapping, stop/disconnect cleanup and reports.
-  Hardware motion acceptance is pending; startup remains passive.
+  Operator-run dual-arm following completed a short trial with both disables
+  verified; startup remains passive. Quantified tracking accuracy is unmeasured.
 - Following no longer inherits manual-slider slew/offset restrictions. Leader
   calibration and diagnostics are collapsed by default in Viser.
 
@@ -19,6 +20,17 @@
   and gripper endpoint capture, visible completeness/unsaved status and persistence.
 - Capture rejects moving, stale or enabled-leader feedback and retains previous
   values on failure. Advanced direction/device controls remain available.
+
+## 0.3.0 — 2026-10-31
+
+- Add independent `openarm_video` package and `video` extra, with passive imports,
+  configurable RGB/OpenNI2 sources, timestamped frames, device leases, reconnect
+  lifecycle, and explicit software-only simulation.
+- Add `openarm-runtime video`, packaged four-view assets, Safari-compatible finite
+  JPEG/PNG requests and raw millimetre-depth download. The vendor SDK and machine
+  configuration remain outside the package.
+- Fix depth/profile test path comparisons on macOS and let Linux/macOS CI jobs
+  complete independently.
 
 ## 0.2.0 — 2026-10-31
 
