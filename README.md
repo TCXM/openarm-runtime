@@ -15,10 +15,10 @@ python3.12 -m venv .venv
 source .venv/bin/activate
 
 # Core: state types, software mapping and control API; no GUI or hardware SDK.
-pip install "openarm-runtime @ git+https://github.com/TCXM/openarm-runtime.git@v0.5.0"
+pip install "openarm-runtime @ git+https://github.com/TCXM/openarm-runtime.git@v0.6.0"
 
 # Serial leader readout, with a browser-based virtual robot.
-pip install "openarm-runtime[leader,viewer] @ git+https://github.com/TCXM/openarm-runtime.git@v0.5.0"
+pip install "openarm-runtime[leader,viewer] @ git+https://github.com/TCXM/openarm-runtime.git@v0.6.0"
 ```
 
 Extras compose freely:
@@ -26,7 +26,7 @@ Extras compose freely:
 - `viewer`: Viser + URDF/mesh loading.
 - `tactile`: pinned community Paxini SDK + PySerial; combine with `viewer` for visualization.
 - `video`: OpenCV headless + NumPy + Flask; independent of Viser, leaders and CAN.
-- `platform` (unreleased; current checkout): NiceGUI/FastAPI dashboard and aiohttp gateway.
+- `platform`: NiceGUI/FastAPI dashboard and aiohttp gateway.
 - `follower`: official OpenArm CAN SDK 1.4.1 and its build dependencies.
 
 The follower extra requires a Linux machine and the matching native C++ SDK.
@@ -42,7 +42,7 @@ project's environment. With uv, declare and lock the dependency directly:
 
 ```sh
 # Run in your own Python 3.12 project.
-uv add "openarm-runtime[leader,viewer] @ git+https://github.com/TCXM/openarm-runtime.git@v0.5.0"
+uv add "openarm-runtime[leader,viewer] @ git+https://github.com/TCXM/openarm-runtime.git@v0.6.0"
 ```
 
 **Modify the runtime while developing your application:** clone the source
@@ -81,12 +81,13 @@ see [contributing](CONTRIBUTING.md).
 The **OpenArm Platform** combines motor control, teleoperation, tactile and
 vision at **http://127.0.0.1:8888**. NiceGUI provides the dashboard; its
 FastAPI/Uvicorn server and aiohttp proxy carry module pages and real-time data
-through that address. This feature is in the current checkout, not the v0.5.0
-release. Install its optional dependencies from this checkout, configure the
-machine once using [platform.example.json](platform.example.json), then launch:
+through that address. Available from v0.6.0, it replaces separate module
+launches with one entry point. Install the optional platform dependencies,
+configure the machine once using [platform.example.json](platform.example.json),
+then launch:
 
 ```sh
-python -m pip install -e ".[platform]"
+python -m pip install "openarm-runtime[platform] @ git+https://github.com/TCXM/openarm-runtime.git@v0.6.0"
 openarm-runtime platform --profile ~/.config/openarm-runtime/platform.json
 ```
 
@@ -241,7 +242,7 @@ ssh -N -L 8890:127.0.0.1:8890 -L 8891:127.0.0.1:8891 your-workstation
 Video is available starting with v0.3.0:
 
 ```sh
-python -m pip install "openarm-runtime[video] @ git+https://github.com/TCXM/openarm-runtime.git@v0.5.0"
+python -m pip install "openarm-runtime[video] @ git+https://github.com/TCXM/openarm-runtime.git@v0.6.0"
 # No cameras or vendor SDK required; clearly labelled SIMULATION.
 openarm-runtime video --simulate --port 5004
 ```
@@ -351,7 +352,7 @@ examples in `examples/`. [Changelog](CHANGELOG.md) · [Provenance](ORIGIN.md) ·
 Paxini IP-M2324-Core (68 points) with the single-channel USB serial converter:
 
 ```sh
-pip install "openarm-runtime[tactile,viewer] @ git+https://github.com/TCXM/openarm-runtime.git@v0.5.0"
+pip install "openarm-runtime[tactile,viewer] @ git+https://github.com/TCXM/openarm-runtime.git@v0.6.0"
 openarm-runtime tactile --device /dev/serial/by-id/YOUR_CONVERTER --device-id 2 --port 8891
 ```
 

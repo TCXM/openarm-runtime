@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.6.0 — 2026-10-31
 
 - Add the local OpenArm Platform workspace with unchanged control, teleoperation,
   tactile and vision subpages, configured single-command startup and independent
@@ -14,6 +14,13 @@
   Add the optional `platform` extra; core imports and CLI help stay passive.
   Preserve mounted module views during sensing navigation and keep the existing
   motor-control lifecycle and exclusive mode switching.
+- Document replacement of standalone launches, one-port SSH access and wrist
+  camera recovery using distinct USB topology paths when device serials collide.
+  Hardware profiles and calibration remain external to the package.
+- Validate the installed platform wheel on Linux and macOS. Browser acceptance
+  covers persistent module views, HTTP/video streaming, WebSockets and clean
+  shutdown with software fixtures; read-only workstation checks display all four
+  cameras and both tactile viewers through the platform port.
 
 ## 0.5.0 — 2026-10-31
 

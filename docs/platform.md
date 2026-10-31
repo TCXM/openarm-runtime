@@ -10,8 +10,15 @@ manager coordinates hardware ownership and shutdown.
 
 ## Local workstation
 
-The platform is an unreleased feature of the current checkout. Install the
-optional platform dependencies, then configure the machine:
+The platform is available from v0.6.0. In a Python 3.12 environment, install
+the optional platform dependencies and configure the machine as described below:
+
+```sh
+python -m pip install "openarm-runtime[platform] @ git+https://github.com/TCXM/openarm-runtime.git@v0.6.0"
+openarm-runtime platform --profile ~/.config/openarm-runtime/platform.json
+```
+
+For development from a checkout:
 
 ```sh
 cd /path/to/openarm-runtime
@@ -20,7 +27,7 @@ python -m pip install -e ".[platform]"
 python3 run_platform.py
 ```
 
-Open http://127.0.0.1:8888 . The launcher uses this checkout's `.venv` and
+Open http://127.0.0.1:8888 . The development launcher uses this checkout's `.venv` and
 `~/.config/openarm-runtime/platform.json`. It starts configured missing services,
 reuses existing listeners and leaves reused processes alone when it exits.
 Ctrl+C closes only services started by this platform. Child output is in
