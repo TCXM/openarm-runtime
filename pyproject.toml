@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools==80.9.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "openarm-runtime"
+version = "0.1.0"
+description = "Reusable OpenArm Classic CAN control, Feetech leader readout and optional Viser tools"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = []
+
+[project.optional-dependencies]
+leader = ["feetech-servo-sdk==1.0.0", "pyserial==3.5"]
+viewer = ["viser[urdf]==1.1.1", "pycollada==0.9.3"]
+follower = [
+  "openarm-can @ git+https://github.com/enactic/openarm_can.git@bfd4e52194aefe38389fa6e670be3738136facb9#subdirectory=python",
+  "nanobind==2.10.2",
+  "scikit-build-core==1.1.1",
+]
+
+[project.scripts]
+openarm-runtime = "openarm_runtime.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.uv]
+no-build-isolation-package = ["openarm-can"]

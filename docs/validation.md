@@ -1,0 +1,122 @@
+# Hardware validation
+
+## Standalone package extraction (2026-10-31)
+
+This repository is the extracted package, not the original research checkout.
+Historical `code/hardware` paths below refer to the source project at validation time.
+
+- Local core-only install: 59 tests, 57 passed, two skipped (external assets and
+  installed-wheel-only assertion). Core imports work without GUI, serial or CAN SDK.
+- Built both sdist and wheel; installed the wheel in a new Linux/Python3.12 environment
+  outside either source checkout with leader/viewer extras. All59 tests passed,
+  including actual official-model loading and an assertion that imports originate
+  in site-packages. Tests do not inject a source directory into sys.path.
+- Installed follower extra from the wheel metadata using the existing official C++
+  prefix and documented build configuration. SDK1.4.1 import, all8 stateless MIT
+  encoders/zero-feedforward checks and dependency compatibility checks passed.
+- Extraction verification opened no CAN or serial device, enabled no motor, and did
+  not replace/restart the active workstation service. The new lifecycle adapter is
+  covered with mode-rejection, passive-import and exception-cleanup tests.
+- Physical validation below remains the original hardware evidence. A package build
+  is not new real-machine acceptance; the original project will switch dependencies
+  in a subsequent step.
+
+## Working baseline
+
+- Linux / Python 3.12, official OpenArm CAN SDK 1.4.1 (pinned source and uv lock),
+  Classic CAN 1 Mbps through SocketCAN. No SDK fork or downgrade.
+- User-confirmed wiring: can0 = right, can1 = left; IDs1–8 on each bus.
+- Viser: user-triggered whole-arm enable/hold, per-joint ±30° target sliders,
+  default target speed 5°/s, reference follower gains. One arm at a time.
+- Startup is read-only. Control uses SDK packet encoders with fresh batch feedback;
+  stopping/disconnecting attempts disable and checks each motor. No automatic zero writes.
+
+## Hardware evidence (2026-10-30)
+
+The user reported that the whole-arm interface moved the robot successfully.
+Saved workstation reports contain arm_hold sessions on both buses and successful
+disable readbacks for all eight motors of each operated arm:
+
+- Right: `20261030T153349Z-41002449db0d4d8cbf08206cb550bab2.json`,
+  `20261030T153734Z-53230d07e1864b11bbd1212b124098e8.json`.
+- Left: `20261030T153827Z-aa2e82d6b0f443f38a21c4d33462a11d.json`.
+- Final `end-of-day-check.json`: both buses passed, all16 status=0 (disabled).
+  Viser and SSH forwarding were then stopped at the user's request.
+
+Reports are outside Git under the workstation's `robot_deps/openarm-reports` and
+`robot_deps/openarm-backups`. These establish an interactive working baseline,
+not quantified trajectory accuracy, full-range acceptance or unattended reliability.
+
+## Retained protocol findings
+
+- Each motor's can_br must read4; host configuration must be Classic 1 Mbps.
+- J1/J2 RID10 may time out despite normal state/control replies. The panel's explicit
+  MIT-trial option permits this case; a readback identifying another mode still rejects.
+- Right ID5 TMAX=3 Nm differs from SDK DM4310's 10 Nm. Firmware is left unchanged.
+  Current commands enforce zero-feedforward bits=2047, independent of TMAX; actual
+  feedback ranges are used for decoding/effort checks. Position/velocity mismatches reject.
+- Command responses can arrive after the next request. Transition reads are spaced,
+  previous replies drained, and enable/disable statuses confirmed with bounded waits.
+
+## Cleanup verification (2026-10-31)
+
+The retained SDK/Classic/whole-arm path is unchanged. Consolidated to one runtime CLI
+with prepare/check/view/panel and separated operation reports from CLI code.
+Superseded isolated-joint controls, unvalidated calibration/zero prototypes and the
+duplicate viewer CLI/checker were archived outside the repository and removed from
+the runnable tree. Protocol, shutdown, UI and model regressions remain.
+
+Cleanup checks use offline tests, installed SDK import/encoding and model loading;
+they do not start a live controller, send motor commands or alter CAN configuration.
+
+- Local: 45 tests, 44 passed and the external-model asset test skipped.
+- Workstation: all45 tests passed with the retained official model assets.
+- `uv lock --check --offline`, `uv pip check`, SDK1.4.1 import and existing machine
+  profile loading passed; installed SDK/uv dependencies were not rebuilt or upgraded.
+- Source snapshots before cleanup are preserved outside Git in the local archive
+  and workstation `openarm-backups/hardware-source-before-cleanup-20261031T104931.tar.gz`.
+  Retired migration logs, DMTool inspection bundle and installer/asset transfer copies
+  are grouped under `openarm-backups/retired-tools-20261031`.
+
+## Leader-driven virtual arms (2026-10-31)
+
+Read-only inspection on `yunzhen_ws` identified two USB serial adapters and all16
+STS3215 servos (model777, IDs1–8 on each, 1 Mbps/protocol0). All torque-enable
+registers read0. Stable device identities end in `5B14114594` and `5B90150374`;
+their physical left/right assignment still requires a user movement check.
+
+Using the maintained read-only SDK boundary, 30 complete eight-servo samples per
+bus succeeded, averaging 3.95 / 3.89 ms per sample. The new leader Viser route was
+started and browser-checked with live counts for both arms and official geometry.
+Local tests: 50 passed plus one external-model skip; workstation: all51 passed.
+Tests cover transmit read allowlisting, signed feedback, encoder wrap/remap/signs,
+device-bound calibration persistence, stale/enabled capture rejection and failure cleanup.
+
+A subsequent concurrent 150-cycle-per-bus read observed one voltage-error reply on
+adapter `5B14114594`, ID7. Read voltage ranged3.9–4.9 V on that bus and4.4–4.9 V on
+the other; configured minimum was4.0 V. Voltage-only alarms on complete, checksum-valid
+replies now remain usable for virtual display and are shown as a nonblocking status.
+Other servo faults, transport errors and stale samples still hide the affected arm.
+Intermittent power stability therefore remains an on-site check, not a verified property.
+
+This establishes the serial-to-model display path. User movement, physical left/right
+mapping, pose alignment, joint directions and gripper endpoints await on-site confirmation.
+Software calibration is intentionally separate from follower hardware calibration;
+the leader route does not connect to follower CAN or send physical motion commands.
+
+The first user trial exposed a confusing persistent zero-pose preview: serial values
+changed while that checkbox deliberately froze the displayed pose. The preview was
+removed. The default panel now shows two connection states, realignment and side swap;
+calibration and diagnostics are collapsed. Realignment captures both current poses as
+relative origins, with rollback on a failed capture. A two-frame viewer regression
+checks that changed encoder inputs update both model configurations without a preview
+override. Workstation tests after this correction: all52 passed. Voltage-only alarms
+are also tested separately from corrupt/short reads and combined fault bits.
+
+## Remaining follower work
+
+Hardware zero/sign calibration, gripper transmission mapping, quantified accuracy,
+collision-aware joint limits and long-running/disconnect robustness are not accepted.
+Calibration prototypes are archived for future review rather than exposed as a
+verified operator workflow. Continue new real-machine validation through explicit
+user actions; the SDK's protocol range is not a mechanical safe-contact limit.

@@ -1,0 +1,3 @@
+include AGENTS.md ORIGIN.md THIRD_PARTY.md classic.example.json sync.sh uv.lock .python-version
+recursive-include docs *.md
+recursive-include tests *.py
