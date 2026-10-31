@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = "==3.12.*"
 
 [[package]]
@@ -430,7 +430,7 @@ source = { git = "https://github.com/enactic/openarm_can.git?subdirectory=python
 
 [[package]]
 name = "openarm-runtime"
-version = "0.4.0"
+version = "0.5.0"
 source = { editable = "." }
 
 [package.optional-dependencies]
@@ -441,6 +441,10 @@ follower = [
 ]
 leader = [
     { name = "feetech-servo-sdk" },
+    { name = "pyserial" },
+]
+tactile = [
+    { name = "paxini-sdk" },
     { name = "pyserial" },
 ]
 video = [
@@ -461,12 +465,14 @@ requires-dist = [
     { name = "numpy", marker = "extra == 'video'", specifier = "==2.5.4" },
     { name = "openarm-can", marker = "extra == 'follower'", git = "https://github.com/enactic/openarm_can.git?subdirectory=python&rev=bfd4e52194aefe38389fa6e670be3738136facb9" },
     { name = "opencv-python-headless", marker = "extra == 'video'", specifier = "==4.13.0.92" },
+    { name = "paxini-sdk", marker = "extra == 'tactile'", git = "https://github.com/Jingyi-Z/paxini-sdk.git?rev=79c82145f88e158dd7706736e8c07f14f11cbd7a" },
     { name = "pycollada", marker = "extra == 'viewer'", specifier = "==0.9.3" },
     { name = "pyserial", marker = "extra == 'leader'", specifier = "==3.5" },
+    { name = "pyserial", marker = "extra == 'tactile'", specifier = "==3.5" },
     { name = "scikit-build-core", marker = "extra == 'follower'", specifier = "==1.1.1" },
     { name = "viser", extras = ["urdf"], marker = "extra == 'viewer'", specifier = "==1.1.1" },
 ]
-provides-extras = ["leader", "viewer", "video", "follower"]
+provides-extras = ["leader", "viewer", "tactile", "video", "follower"]
 
 [[package]]
 name = "opencv-python-headless"
@@ -502,6 +508,14 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/5a/82/42f767fc1c1143d6fd36efb827202a2d997a375e160a71eb2888a925aac1/pathspec-1.1.1.tar.gz", hash = "sha256:17db5ecd524104a120e173814c90367a96a98d07c45b2e10c2f3919fff91bf5a", size = 135180, upload-time = "2026-04-27T01:46:08.907Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/f1/d9/7fb5aa316bc299258e68c73ba3bddbc499654a07f151cba08f6153988714/pathspec-1.1.1-py3-none-any.whl", hash = "sha256:a00ce642f577bf7f473932318056212bc4f8bfdf53128c78bbd5af0b9b20b189", size = 57328, upload-time = "2026-04-27T01:46:07.06Z" },
+]
+
+[[package]]
+name = "paxini-sdk"
+version = "0.1.0"
+source = { git = "https://github.com/Jingyi-Z/paxini-sdk.git?rev=79c82145f88e158dd7706736e8c07f14f11cbd7a#79c82145f88e158dd7706736e8c07f14f11cbd7a" }
+dependencies = [
+    { name = "pyserial" },
 ]
 
 [[package]]

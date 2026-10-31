@@ -22,32 +22,47 @@ with patch('socket.socket', side_effect=AssertionError('opened socket')), \
      patch('subprocess.Popen', side_effect=AssertionError('started process')), \
      patch('threading.Thread.start', side_effect=AssertionError('started thread')):
     import openarm_runtime, openarm_leader, openarm_video
-assert not any(n in sys.modules for n in ('viser', 'numpy', 'serial', 'scservo_sdk', 'openarm_can', 'openarm_viewer', 'cv2', 'flask'))
+    from openarm_tactile import TactileReader, Sample, SENSOR, POINT_COUNT
+    reader = TactileReader('/dev/not-a-real-device')
+    assert reader.snapshot()['state'] == 'waiting'
+    reader.close()
+    assert reader.snapshot()['state'] == 'closed'
+    assert SENSOR == 'PXSR-STDIP03A' and POINT_COUNT == 68
+    assert Sample((0, 0, 0), ((0, 0, 0),) * POINT_COUNT).resultant == (0, 0, 0)
+assert not any(n in sys.modules for n in ('viser', 'numpy', 'serial', 'scservo_sdk', 'openarm_can', 'openarm_viewer', 'cv2', 'flask', 'paxini_sdk', 'openarm_tactile.app', 'openarm_tactile.dual'))
 print(openarm_runtime.__version__)
 """
         with tempfile.TemporaryDirectory() as root:
             result = subprocess.run([sys.executable, "-I", "-c", script], cwd=root,
                                     capture_output=True, text=True, check=True)
-        self.assertEqual(result.stdout.strip(), "0.4.0")
+        self.assertEqual(result.stdout.strip(), "0.5.0")
 
     def test_cli_works_outside_checkout(self):
         with tempfile.TemporaryDirectory() as root:
             result = subprocess.run([sys.executable, "-I", "-m", "openarm_runtime", "--help"],
                                     cwd=root, capture_output=True, text=True, check=True)
-        for command in ("prepare", "leader", "check", "view", "panel", "calibrate", "video"):
+        for command in ("prepare", "leader", "check", "view", "panel", "calibrate", "video", "tactile"):
             self.assertIn(command, result.stdout)
         with tempfile.TemporaryDirectory() as root:
             help_result = subprocess.run([sys.executable, "-I", "-m", "openarm_runtime", "video", "--help"],
                                          cwd=root, capture_output=True, text=True, check=True)
         self.assertIn("--simulate", help_result.stdout)
         self.assertIn("--profile", help_result.stdout)
+        with tempfile.TemporaryDirectory() as root:
+            tactile_help = subprocess.run(
+                [sys.executable, "-I", "-m", "openarm_runtime", "tactile", "--help"],
+                cwd=root, capture_output=True, text=True, check=True,
+            )
+        for option in ("--device", "--right-device", "--simulate", "--device-id", "--baudrate", "--port"):
+            self.assertIn(option, tactile_help.stdout)
 
     @unittest.skipUnless(os.environ.get("OPENARM_EXPECT_INSTALLED"), "Wheel-only validation")
     def test_validation_uses_installed_wheel_not_checkout(self):
-        import openarm_runtime
+        import openarm_runtime, openarm_tactile
         from importlib.metadata import version
         self.assertIn("site-packages", Path(openarm_runtime.__file__).parts)
-        self.assertEqual(version("openarm-runtime"), "0.4.0")
+        self.assertIn("site-packages", Path(openarm_tactile.__file__).parts)
+        self.assertEqual(version("openarm-runtime"), "0.5.0")
 
     def test_video_resources_are_present_outside_source_tree(self):
         from importlib.resources import files
@@ -61,6 +76,40 @@ print(openarm_runtime.__version__)
                                 capture_output=True, text=True)
         self.assertEqual(result.returncode, 2)
         self.assertIn("--profile", result.stderr)
+
+    def test_tactile_cli_rejects_invalid_args_before_loading_viewer_or_hardware(self):
+        script = """
+import builtins
+import sys
+from unittest.mock import patch
+from openarm_runtime.__main__ import main
+original_import = builtins.__import__
+def checked_import(name, *args, **kwargs):
+    if name.split('.')[0] in {'viser', 'serial', 'paxini_sdk', 'numpy'} or name in {'openarm_tactile.app', 'openarm_tactile.dual'}:
+        raise AssertionError('loaded hardware/viewer dependency: ' + name)
+    return original_import(name, *args, **kwargs)
+sys.argv = ['openarm-runtime', 'tactile', *sys.argv[1:]]
+with patch('builtins.__import__', side_effect=checked_import):
+    main()
+"""
+        cases = (
+            ([], "required"),
+            (["--simulate", "--device", "not-a-device"], "not allowed"),
+            (["--simulate", "--device-id", "0"], "Device ID"),
+            (["--simulate", "--device-id", "256"], "Device ID"),
+            (["--simulate", "--baudrate", "0"], "baudrate"),
+            (["--simulate", "--port", "1023"], "Port"),
+            (["--simulate", "--right-device", "not-a-device"], "--right-device"),
+            (["--device", "first", "--right-device", "second", "--port", "65525"], "65524"),
+            (["--device", "same", "--right-device", "./same"], "different"),
+        )
+        with tempfile.TemporaryDirectory() as root:
+            for args, expected in cases:
+                with self.subTest(args=args):
+                    result = subprocess.run([sys.executable, "-I", "-c", script, *args],
+                                            cwd=root, capture_output=True, text=True)
+                    self.assertEqual(result.returncode, 2, result.stderr)
+                    self.assertIn(expected, result.stderr)
 
     def test_unconfirmed_mapping_never_opens_bus(self):
         with patch("openarm_runtime.control.ClassicBus") as factory:

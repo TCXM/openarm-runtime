@@ -1,7 +1,7 @@
 # OpenArm Runtime
 
 A small Python toolkit for **OpenArm follower control, Feetech leader readout,
-RGB/depth video capture, and optional browser interfaces**. Use the Python API in your own application, or
+RGB/depth video capture, Paxini tactile sensing, and optional browser interfaces**. Use the Python API in your own application, or
 the CLI for live inspection and user-operated control.
 
 Python 3.12 · MIT · Linux SocketCAN for followers · Independent community project
@@ -15,15 +15,16 @@ python3.12 -m venv .venv
 source .venv/bin/activate
 
 # Core: state types, software mapping and control API; no GUI or hardware SDK.
-pip install "openarm-runtime @ git+https://github.com/TCXM/openarm-runtime.git@v0.4.0"
+pip install "openarm-runtime @ git+https://github.com/TCXM/openarm-runtime.git@v0.5.0"
 
 # Serial leader readout, with a browser-based virtual robot.
-pip install "openarm-runtime[leader,viewer] @ git+https://github.com/TCXM/openarm-runtime.git@v0.4.0"
+pip install "openarm-runtime[leader,viewer] @ git+https://github.com/TCXM/openarm-runtime.git@v0.5.0"
 ```
 
 Extras compose freely:
 - `leader`: Feetech SDK + PySerial for STS3215 buses.
 - `viewer`: Viser + URDF/mesh loading.
+- `tactile`: pinned community Paxini SDK + PySerial; combine with `viewer` for visualization.
 - `video`: OpenCV headless + NumPy + Flask; independent of Viser, leaders and CAN.
 - `follower`: official OpenArm CAN SDK 1.4.1 and its build dependencies.
 
@@ -40,7 +41,7 @@ project's environment. With uv, declare and lock the dependency directly:
 
 ```sh
 # Run in your own Python 3.12 project.
-uv add "openarm-runtime[leader,viewer] @ git+https://github.com/TCXM/openarm-runtime.git@v0.4.0"
+uv add "openarm-runtime[leader,viewer] @ git+https://github.com/TCXM/openarm-runtime.git@v0.5.0"
 ```
 
 **Modify the runtime while developing your application:** clone the source
@@ -205,7 +206,7 @@ ssh -N -L 8890:127.0.0.1:8890 -L 8891:127.0.0.1:8891 your-workstation
 Video is available starting with v0.3.0:
 
 ```sh
-python -m pip install "openarm-runtime[video] @ git+https://github.com/TCXM/openarm-runtime.git@v0.4.0"
+python -m pip install "openarm-runtime[video] @ git+https://github.com/TCXM/openarm-runtime.git@v0.5.0"
 # No cameras or vendor SDK required; clearly labelled SIMULATION.
 openarm-runtime video --simulate --port 5004
 ```
@@ -309,3 +310,38 @@ release workflow and compatibility policy.
 Implementation lives in `src/`, regression tests in `tests/`, and small API usage
 examples in `examples/`. [Changelog](CHANGELOG.md) · [Provenance](ORIGIN.md) ·
 [Third-party notices](THIRD_PARTY.md) · [MIT license](LICENSE)
+
+## Tactile sensing
+
+Paxini IP-M2324-Core (68 points) with the single-channel USB serial converter:
+
+```sh
+pip install "openarm-runtime[tactile,viewer] @ git+https://github.com/TCXM/openarm-runtime.git@v0.5.0"
+openarm-runtime tactile --device /dev/serial/by-id/YOUR_CONVERTER --device-id 2 --port 8891
+```
+
+Use `--right-device /dev/serial/by-id/SECOND_CONVERTER` for two sensors on one page.
+The workstation display identifies both sensors as belonging to the left arm;
+left/right refer to their positions, not two robot arms. The right arm has no tactile sensor.
+Use `--simulate` instead of `--device` for offline visualization. Set the device ID
+from your sensor configuration; the validated units use 2. The viewer shows raw
+force counts, 3D taxel positions and force vectors; it does not calibrate hardware.
+
+For capture without a viewer, install only `[tactile]`:
+
+```python
+import time
+from openarm_tactile import TactileReader
+
+with TactileReader("/dev/serial/by-id/YOUR_CONVERTER", device_id=2) as reader:
+    for _ in range(100):
+        snapshot = reader.snapshot()
+        if snapshot["state"] == "live":
+            print(snapshot["sample"].resultant)  # XYZ raw counts, not newtons.
+        time.sleep(0.1)
+```
+
+For a configured development checkout, `python3 tactile.py` uses `.venv` and the
+external mapping in `~/.config/openarm-runtime/tactile.json`. This convenience
+script is not needed when using the installed CLI. See [tactile setup](docs/tactile.md)
+and the [Python API guide](docs/api.md#tactile).

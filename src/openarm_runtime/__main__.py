@@ -38,7 +38,42 @@ def main():
     video.add_argument("--profile", type=Path, help="External JSON camera configuration")
     video.add_argument("--simulate", action="store_true", help="Software images only; never open cameras")
     video.add_argument("--port", type=int, default=5003)
+    tactile = commands.add_parser("tactile", help="View Paxini IP-M2324-Core tactile forces")
+    source = tactile.add_mutually_exclusive_group(required=True)
+    source.add_argument("--device", help="USB serial converter path")
+    source.add_argument("--simulate", action="store_true")
+    tactile.add_argument("--right-device", help="Second serial converter; show both sensors side by side")
+    tactile.add_argument("--port", type=int, default=8891)
+    tactile.add_argument("--baudrate", type=int, default=921600)
+    tactile.add_argument("--device-id", type=int, default=1, help="Sensor module number + 1 (1..255)")
     args = parser.parse_args()
+    if args.command == "tactile":
+        if not 1024 <= args.port <= 65535 or args.baudrate <= 0:
+            parser.error("Port must be 1024..65535 and baudrate must be positive")
+        if not 1 <= args.device_id <= 255:
+            parser.error("Device ID must be 1..255")
+        if args.right_device:
+            if args.simulate or args.port > 65524:
+                parser.error("--right-device requires --device and port <= 65524")
+            if Path(args.device).resolve() == Path(args.right_device).resolve():
+                parser.error("Left and right devices must be different")
+            from openarm_tactile.dual import serve as serve_tactile
+        else:
+            from openarm_tactile.app import serve as serve_tactile
+
+        def shutdown_tactile(signum, frame):
+            raise KeyboardInterrupt(f"Signal {signum}")
+
+        previous = signal.signal(signal.SIGTERM, shutdown_tactile)
+        try:
+            serve_tactile(args.device, simulate=args.simulate, port=args.port,
+                          baudrate=args.baudrate, device_id=args.device_id,
+                          **({"right_device": args.right_device} if args.right_device else {}))
+        except KeyboardInterrupt:
+            pass
+        finally:
+            signal.signal(signal.SIGTERM, previous)
+        return
     if args.command == "video":
         if not 1024 <= args.port <= 65535:
             parser.error("Port must be 1024..65535")
