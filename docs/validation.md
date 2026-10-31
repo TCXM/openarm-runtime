@@ -219,3 +219,23 @@ was not exercised. The configured leader serial adapters and saved runtime
 leader calibration were absent. Real following requires those prerequisites
 and an operator-run motion trial; software gateway acceptance does not claim
 physical tracking accuracy or hardware readiness.
+
+
+## Wrist-camera recovery — 2026-10-31
+
+A subsequent device-level check found both wrist UVC cameras enumerated and
+capable of acquisition. The earlier disconnected status came from missing
+`/dev/camera_wrist_*` aliases: their udev rules referenced an old USB topology.
+Both cameras reported the same serial identifier, so the external video profile
+was updated to distinct current topology paths, with the operator confirming
+left/right from captured images.
+
+The workstation's three legacy video processes were replaced by the packaged
+`openarm-runtime video --profile` service owned by the platform. Profile backups
+were retained outside Git. Head RGB, depth and both wrists all reported Online
+with empty capture errors. A short counter-based observation measured 30.0 fps
+for head RGB, 29.6 fps for depth, and 59.3 fps per wrist at 1280×720; HTTP wrist
+previews were 960×540. These are a short live observation, not a sustained
+throughput guarantee. Browser verification displayed all four real images and
+both tactile viewers through the one platform port, with no off-origin module
+requests or JavaScript errors. No motor controls were operated.
