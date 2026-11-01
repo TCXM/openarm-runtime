@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.7.0 — 2026-11-01
 
 - Add optional Pinocchio gravity feedforward shared by hold, panel, teleoperation
   and policy execution; explicit model/motor mappings, payload, shadow mode,
