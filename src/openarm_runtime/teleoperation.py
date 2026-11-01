@@ -8,15 +8,17 @@ from pathlib import Path
 import threading
 import time
 import uuid
+from dataclasses import asdict
 
 from openarm_leader.mapping import delta, SOURCE_IDS
 from .arm import ArmHold
 from .config import bus_lease
 from .control import check_modes
-from .report import Report
+from .report import AsyncReport
 from .transport import ClassicBus
 from .joints import JOINT_LIMITS
 from .gravity import prepare_gravity
+from .homing import HomeCoordinator
 
 
 def leader_sample(reader):
@@ -64,7 +66,7 @@ def follower_targets(side, base, offsets):
 
 
 class Teleoperation:
-    def __init__(self, profile, mapping, readers, report_root):
+    def __init__(self, profile, mapping, readers, report_root, collection=None):
         self.profile, self.mapping, self.readers = profile, mapping, readers
         self.report_root = Path(report_root)
         self.lock = threading.Lock()
@@ -73,12 +75,18 @@ class Teleoperation:
         self.owner = None
         self.closed = False
         self.message = "待机 · 启动时对齐当前姿态"
+        self.collection = collection
+        self.home = None
+        self.origins = {}
+        self.takeover_generation = 0
+        self.active_mapping = None
+        self.active_readers = {}
 
     @property
     def busy(self):
         return self.lock.locked()
 
-    def start(self, owner, sides):
+    def start(self, owner, sides, *, home=False):
         if (not self.profile.mapping_verified or not 1 <= len(sides) <= 2
                 or len(set(sides)) != len(sides) or any(s not in ("left", "right") for s in sides)):
             raise ValueError("请确认机械臂映射")
@@ -92,6 +100,29 @@ class Teleoperation:
                     raise ValueError("请先完成并保存主臂标定")
                 leader_sample(reader)
             self.cancel.clear()
+            self.home = HomeCoordinator(sides)
+            if home:
+                self.home.request()
+            self.origins = {}
+            self.takeover_generation = 0
+            self.active_mapping, self.active_readers = mapping, selected
+            if self.collection:
+                from openarm_runtime import __version__
+                with self.collection.lock:
+                    # Preserve sensing streams, replace motion streams for selected arms.
+                    self.collection.streams = {k: v for k, v in self.collection.streams.items()
+                                               if not k.startswith(("leader/", "intent/", "robot/"))}
+                    self.collection.context.update(dict(runtime_version=__version__, profile=asdict(self.profile),
+                                                   mapping=copy.deepcopy(mapping.data), sides=list(sides),
+                                                   action_semantics="dispatched_joint_position_rad",
+                                                   joint_order=[f"{s}/j{i}" for s in sides for i in range(1, 9)],
+                                                   takeover={}, controller={}))
+                for side, reader in selected.items():
+                    self.collection.register(f"leader/{side}", encoding="leader_registers", timestamp_semantics="read_started")
+                    self.collection.register(f"intent/{side}", encoding="mapped_targets", timestamp_semantics="computed")
+                    self.collection.register(f"robot/{side}", encoding="mit_exchange", timestamp_semantics="dispatch_started")
+                    reader.on_sample = lambda sample, count, s=side: self.collection.emit(
+                        f"leader/{s}", sample.received_at, asdict(sample), count)
             self.owner = owner
             self.message = "正在检查从臂并接管…"
             self.worker = threading.Thread(target=self._run, args=(mapping, selected), daemon=True)
@@ -100,6 +131,40 @@ class Teleoperation:
             self.owner = None
             self.lock.release()
             raise
+
+    def return_zero(self, owner):
+        if not self.busy or owner != self.owner or self.cancel.is_set():
+            raise RuntimeError("Only the active operator can return to zero")
+        # Serialize with recorder start; neither operation can race an episode
+        # into the preparatory motion. No storage operation occurs under this lock.
+        guard = self.collection.operation if self.collection else threading.Lock()
+        with guard, self.home.lock:
+            if self.collection and self.collection.episode is not None:
+                raise RuntimeError("请先结束录制，再回零")
+            self.home.request()
+            if self.collection:
+                with self.collection.lock:
+                    self.collection.ready = False
+                    self.collection.context["takeover"] = {}
+            self.message = "正在协调回零 · 七关节，夹爪保持"
+
+    def resume(self, owner):
+        if not self.busy or owner != self.owner or self.cancel.is_set():
+            raise RuntimeError("Only the active operator can resume following")
+        with self.home.lock:
+            if self.home.phase != "holding":
+                raise RuntimeError("请等待从臂回零并保持")
+            if not self.home.settled(time.monotonic()):
+                raise RuntimeError("从臂尚未稳定在零点，请等待或重新回零")
+            samples = {side: leader_sample(reader) for side, reader in self.active_readers.items()}
+            self.origins.update(samples)
+            if self.collection:
+                with self.collection.lock:
+                    self.collection.context["takeover"] = {}
+                    self.collection.ready = False
+            self.takeover_generation += 1
+            self.home.phase = "following"
+            self.message = "已接管主臂当前位置 · 相对跟随中"
 
     def stop(self, owner=None):
         if owner is None or owner == self.owner:
@@ -112,11 +177,13 @@ class Teleoperation:
             self.worker.join(timeout=30)
             if self.worker.is_alive():
                 raise RuntimeError("Teleoperation shutdown timed out")
+        if self.collection:
+            self.collection.close()
 
     def _run(self, mapping, readers):
         report = None
         try:
-            report = Report(self.report_root / f"teleop-{uuid.uuid4().hex}.json",
+            report = AsyncReport(self.report_root / f"teleop-{uuid.uuid4().hex}.json",
                             {"action": "relative_teleoperation", "sides": list(readers),
                              "mapping": mapping.data, "target_mode": "direct_mit",
                              "joint_limits_deg": JOINT_LIMITS, "gripper_excursion_deg": 65})
@@ -124,9 +191,12 @@ class Teleoperation:
             ready = threading.Event()
             state_lock, report_lock = threading.Lock(), threading.Lock()
             holding, errors = set(), []
-            origins = {}
+            origins = self.origins
 
             def record(side, event):
+                if self.collection and event["event"] in ("preflight", "gravity_config", "arm_enabled", "takeover", "home_start", "home_complete"):
+                    with self.collection.lock:
+                        self.collection.context["controller"].setdefault(side, {})[event["event"]] = copy.deepcopy(event)
                 with report_lock:
                     report.record(dict(event, side=side))
 
@@ -161,7 +231,9 @@ class Teleoperation:
                         prepared.wait()
                         control = stack.enter_context(ArmHold(
                             bus, cancelled, lambda event: record(side, event),
-                            lambda states: None, tracking=True, gravity=gravity))
+                            lambda states: None, tracking=True, gravity=gravity,
+                            observe=(lambda event: self.collection.emit(f"robot/{side}", event["dispatch_started_at"], event))
+                            if self.collection else None))
                         # Cancel peer loops before this arm's disable readback waits.
                         stack.enter_context(stop_peers_on_error())
                         period = 1 / self.profile.rate_hz
@@ -169,23 +241,56 @@ class Teleoperation:
                             holding.add(side)
                             if len(holding) == len(readers):
                                 # Capture both origins together after both ramps.
-                                origins.update({s: leader_sample(r) for s, r in readers.items()})
+                                if self.home.phase == "following":
+                                    origins.update({s: leader_sample(r) for s, r in readers.items()})
                                 ready.set()
-                                self.message = ("双臂" if len(readers) == 2 else "单臂") + "跟随中 · 直接位置跟随"
+                                self.message = ("双臂" if len(readers) == 2 else "单臂") + ("跟随中 · 直接位置跟随" if self.home.phase == "following" else "准备回零")
                         previous = time.monotonic()
                         recorded = False
+                        generation, home_epoch, completed_epoch = 0, 0, 0
                         while not self.cancel.is_set():
                             now = time.monotonic()
                             if now - previous > max(0.25, 3 * period):
                                 raise RuntimeError("Teleoperation control deadline missed")
                             previous = now
-                            if ready.is_set():
+                            with self.home.lock:
+                                phase = self.home.phase
+                            if ready.is_set() and phase == "following":
+                                if generation != self.takeover_generation:
+                                    control.base = dict(self.home.targets[side])
+                                    generation = self.takeover_generation
+                                    recorded = False
                                 if not recorded:
                                     record(side, {"event": "takeover", "leader_positions": origins[side].positions,
                                                   "follower_base": control.base})
                                     recorded = True
-                                offsets = relative_offsets(mapping, side, origins[side], leader_sample(reader))
+                                sample = leader_sample(reader)
+                                offsets = relative_offsets(mapping, side, origins[side], sample)
                                 targets = follower_targets(side, control.base, offsets)
+                                if self.collection:
+                                    angles, opening = mapping.angles(side, sample.positions)
+                                    self.collection.emit(f"intent/{side}", now, dict(
+                                        leader_received_at=sample.received_at, mapped_angles_rad=angles,
+                                        gripper_opening=opening, relative_offsets_deg=offsets, targets_rad=targets))
+                                    with self.collection.lock:
+                                        self.collection.context["takeover"][side] = dict(
+                                            leader=asdict(origins[side]), follower_base_rad=dict(control.base))
+                                        self.collection.ready = (self.home.phase == "following" and
+                                                                 len(self.collection.context["takeover"]) == len(readers))
+                            elif ready.is_set():
+                                targets = self.home.step(side, control.targets, control.states, now)
+                                if home_epoch != self.home.epoch:
+                                    home_epoch = self.home.epoch
+                                    record(side, {"event": "home_start", "time": now, "speed_deg_s": self.home.speed_deg_s,
+                                                  "gripper": "hold", "origin_rad": dict(control.targets)})
+                                if self.home.phase == "holding":
+                                    self.message = "从臂已回零并保持 · 可从主臂当前位置开始相对跟随"
+                                    if completed_epoch != home_epoch:
+                                        completed_epoch = home_epoch
+                                        record(side, {"event": "home_complete", "time": now,
+                                                      "targets_rad": targets, "states": {mid: asdict(s) for mid, s in control.states.items()}})
+                                elif self.home.phase in ("collecting", "moving", "settling"):
+                                    self.message = f"缓慢回零 {100 * self.home.progress:.0f}% · 5°/s · 夹爪保持"
                             else:
                                 # Keep the first ready arm serviced while its peer ramps.
                                 targets = dict(control.base)
@@ -213,18 +318,40 @@ class Teleoperation:
                 except Exception:
                     pass
         finally:
-            self.owner = None
-            self.lock.release()
+            try:
+                if self.collection:
+                    self.collection.ready = False
+                    for reader in readers.values():
+                        reader.on_sample = None
+                    try:
+                        self.collection.finish("teleoperation_ended", "Teleoperation ended during recording")
+                    except Exception as exc:
+                        self.message = f"{self.message}；数采未完成：{exc}"
+                if report:
+                    try:
+                        report.close()
+                    except Exception as exc:
+                        self.message = f"{self.message}；报告未完成：{exc}"
+            finally:
+                if self.home:
+                    self.home.phase = "stopped"
+                self.owner = None
+                self.lock.release()
 
 
-def attach(server, profile, mapping, readers, report_root, mapping_lock, calibration_busy, saved):
-    session = Teleoperation(profile, mapping, readers, report_root)
+def attach(server, profile, mapping, readers, report_root, mapping_lock, calibration_busy, saved, collection=None):
+    session = Teleoperation(profile, mapping, readers, report_root, collection)
     with server.gui.add_folder("真实从臂跟随"):
-        server.gui.add_markdown("接管当前姿态，直接跟随；到关节边界时裁剪。停止或页面断开会失能。")
+        server.gui.add_markdown("从臂回零后，以主臂当前位置开始相对跟随，无需精确对齐主臂。回零仅移动从臂七关节，夹爪保持；停止或页面断开会失能。")
         choice = server.gui.add_dropdown("跟随机械臂", options=("双臂", "右臂", "左臂"), initial_value="双臂")
-        start = server.gui.add_button("开始跟随")
+        home = server.gui.add_button("① 从臂缓慢回零")
+        start = server.gui.add_button("② 开始相对跟随" if collection else "开始跟随")
         stop = server.gui.add_button("停止 · 失能", color="red")
         status = server.gui.add_markdown(session.message)
+    refresh_collection = lambda: None
+    if collection:
+        from openarm_collection.ui import attach as attach_collection
+        refresh_collection = attach_collection(server, session, collection)
 
     @start.on_click
     def begin(event):
@@ -235,7 +362,28 @@ def attach(server, profile, mapping, readers, report_root, mapping_lock, calibra
                 if calibration_busy() or not saved():
                     raise ValueError("请先完成采集并保存标定")
                 sides = {"双臂": ("left", "right"), "右臂": ("right",), "左臂": ("left",)}[choice.value]
-                session.start(event.client.client_id, sides)
+                if session.busy:
+                    session.resume(event.client.client_id)
+                elif collection:
+                    raise ValueError("请先点击从臂缓慢回零")
+                else:
+                    session.start(event.client.client_id, sides)
+            except Exception as exc:
+                session.message = str(exc)
+
+    @home.on_click
+    def go_home(event):
+        if event.client is None:
+            return
+        with mapping_lock:
+            try:
+                if calibration_busy() or not saved():
+                    raise ValueError("请先完成并保存主臂标定")
+                if session.busy:
+                    session.return_zero(event.client.client_id)
+                else:
+                    sides = {"双臂": ("left", "right"), "右臂": ("right",), "左臂": ("left",)}[choice.value]
+                    session.start(event.client.client_id, sides, home=True)
             except Exception as exc:
                 session.message = str(exc)
 
@@ -248,8 +396,12 @@ def attach(server, profile, mapping, readers, report_root, mapping_lock, calibra
         session.stop(client.client_id)
 
     def refresh():
+        refresh_collection()
         status.content = session.message
-        start.disabled = session.busy or calibration_busy() or not saved()
+        phase = session.home.phase if session.home else "idle"
+        start.disabled = calibration_busy() or not saved() or (phase != "holding" if collection else session.busy and phase != "holding")
+        home.disabled = (calibration_busy() or not saved() or (session.busy and phase not in ("following", "holding"))
+                         or bool(collection and collection.episode is not None))
         choice.disabled = session.busy
 
     return session, refresh

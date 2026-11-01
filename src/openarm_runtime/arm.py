@@ -8,15 +8,18 @@ from .telemetry import IDS
 from .config import finite
 
 # openarm_follower/config_openarm_follower.py: J1..J7, gripper.
-FOLLOWER_KP = (30.0, 30.0, 240.0, 240.0, 24.0, 31.0, 25.0, 25.0)
-FOLLOWER_KD = (1.5, 1.5, 3.0, 5.0, 0.3, 0.3, 0.3, 0.3)
+# J1–J7: Enactic openarm_description OpenArm v2 control_gains.yaml.
+# J8 is not specified upstream; retain the existing gripper gains.
+FOLLOWER_KP = (70.0, 70.0, 70.0, 60.0, 10.0, 10.0, 10.0, 25.0)
+FOLLOWER_KD = (2.75, 2.5, 2.0, 2.0, 0.7, 0.6, 0.5, 0.3)
 
 
 class ArmHold:
-    def __init__(self, bus, cancelled, record, publish, *, tracking=False, gravity=None):
+    def __init__(self, bus, cancelled, record, publish, *, tracking=False, gravity=None, observe=None):
         self.bus, self.cancelled, self.record, self.publish = bus, cancelled, record, publish
         self.tracking = tracking
         self.gravity = gravity
+        self.observe = observe
         self.attempted = []
         self.states = {}
         self.base = {}
@@ -157,7 +160,10 @@ class ArmHold:
         self._exchange(dict(targets), FOLLOWER_KP, FOLLOWER_KD)
 
     def _exchange(self, targets, kp, kd):
+        before = self.states
+        feedforward = {mid: 0.0 for mid in IDS}
         if self.gravity is None:
+            started = time.monotonic()
             states = self.bus.exchange(targets, kp, kd)
         else:
             feedforward = self.gravity.update(self.states)
@@ -166,6 +172,7 @@ class ArmHold:
                 effort = kp[mid-1] * (targets[mid] - state.position) - kd[mid-1] * state.velocity + feedforward[mid]
                 if abs(effort) > .9 * self.bus.ranges[mid].torque:
                     raise RuntimeError(f"ID{mid}: combined PD/gravity effort near firmware range")
+            started = time.monotonic()
             states = self.bus.exchange(targets, kp, kd, feedforward)
         if set(states) != set(IDS):
             raise RuntimeError("Incomplete arm feedback")
@@ -174,6 +181,13 @@ class ArmHold:
                 raise RuntimeError("Feedback ID mismatch")
             self.validate(state)
         self.states, self.targets = states, targets
+        if self.observe is not None:
+            self.observe({"dispatch_started_at": started, "exchange_completed_at": time.monotonic(),
+                          "targets_rad": dict(targets), "kp": tuple(kp), "kd": tuple(kd),
+                          "feedforward_nm": feedforward,
+                          "observation_before": {mid: asdict(s) for mid, s in before.items()},
+                          "feedback": {mid: asdict(s) for mid, s in states.items()},
+                          "gravity": self.gravity.last if self.gravity else None})
         self.publish(states)
         self.cycles += 1
         if self.gravity is not None:

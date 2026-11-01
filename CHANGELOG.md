@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.8.0 — 2026-11-01
+
+- Add opt-in teleoperation demonstration collection: native acquisition sinks,
+  bounded asynchronous recording, operator episode review, provenance/quality,
+  read-only crash inspection, causal alignment and optional LeRobot export.
+  Include integrated camera previews and offline simulated operator rehearsal.
+  Complete operator-run dual-arm collection trials with three RGB cameras and
+  two tactile pads, preserving native timelines and explicit episode acceptance.
+- Add operator-triggered synchronized follower return to zero (J1–J7, peak
+  commanded speed 5 degrees/s, gripper held), followed by relative takeover from
+  the leader's current pose. No precise leader alignment or firmware-zero writes.
+  Exclude recording during return/hold and retain stop/disconnect disable cleanup.
+- Use official Enactic OpenArm v2 J1–J7 PD gains in shared follower hold/tracking;
+  retain existing gripper gains. Operator trials validate the workflow; tracking
+  error remains motion-dependent, not a full-workspace accuracy guarantee.
+- Move diagnostic report writing off the CAN control loop and record dispatched
+  gains, commands, pre-command observations and post-command feedback separately.
+
 ## 0.7.0 — 2026-11-01
 
 - Add optional Pinocchio gravity feedforward shared by hold, panel, teleoperation

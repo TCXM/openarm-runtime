@@ -15,6 +15,103 @@ from openarm_runtime.teleoperation import Teleoperation, relative_offsets, follo
 
 
 class TeleoperationTests(unittest.TestCase):
+    def test_home_alignment_resume_recording_and_disable(self):
+        from openarm_collection import Collection
+        from test_arm import FakeBus
+        from contextlib import nullcontext
+        collection = Collection(self.temp.name)
+        self.addCleanup(collection.close)
+        positions = [2048] * 7 + [2000]
+        test = self
+        class Reader:
+            on_sample = None
+            count = 0
+            def snapshot(self):
+                self.count += 1
+                sample = test.sample(positions)
+                if self.on_sample:
+                    self.on_sample(sample, self.count)
+                return sample, "", self.count
+        reader = Reader()
+        session = Teleoperation(Profile("can1", "can0", True), self.mapping,
+                                {"a": reader, "b": reader}, self.temp.name, collection)
+        bus = FakeBus()
+        bus.positions[1] = math.radians(2)
+        bus.preflight = lambda: {}
+        bus.close = Mock()
+        def wait_for(predicate):
+            deadline = time.monotonic() + 4
+            while not predicate() and time.monotonic() < deadline:
+                threading.Event().wait(.01)
+            self.assertTrue(predicate(), session.message)
+        with patch("openarm_runtime.teleoperation.bus_lease", side_effect=lambda *a, **kw: nullcontext()), \
+             patch("openarm_runtime.teleoperation.ClassicBus", return_value=bus), \
+             patch("openarm_runtime.teleoperation.check_modes"), \
+             patch("openarm_runtime.arm.time.sleep"):
+            try:
+                session.start(1, ("right",), home=True)
+                wait_for(lambda: session.home.phase == "holding")
+                self.assertFalse(collection.ready)
+                positions[0] += 200
+                session.resume(1)
+                wait_for(lambda: collection.ready)
+                self.assertAlmostEqual(bus.last_targets[1], 0)
+                self.assertAlmostEqual(bus.last_targets[8], 0)
+                collection.start("home-test", "operator")
+                with self.assertRaisesRegex(RuntimeError, "结束录制"):
+                    session.return_zero(1)
+                collection.finish()
+                session.return_zero(1)
+                self.assertFalse(collection.ready)
+            finally:
+                session.close()
+        self.assertFalse(bus.enabled)
+        self.assertFalse(session.busy)
+
+    def test_episode_finish_preserves_following_and_records_single_arm(self):
+        from openarm_collection import Collection, inspect_episode
+        from test_arm import FakeBus
+        from contextlib import nullcontext
+        collection = Collection(self.temp.name)
+        self.addCleanup(collection.close)
+        test = self
+        class Reader:
+            on_sample = None
+            count = 0
+            def snapshot(self):
+                self.count += 1
+                sample = test.sample()
+                if self.on_sample:
+                    self.on_sample(sample, self.count)
+                return sample, "", self.count
+        reader = Reader()
+        session = Teleoperation(Profile("can1", "can0", True), self.mapping,
+                                {"a": reader, "b": reader}, self.temp.name, collection)
+        bus = FakeBus()
+        bus.preflight = lambda: {}
+        bus.close = Mock()
+        with patch("openarm_runtime.teleoperation.bus_lease", side_effect=lambda *a, **kw: nullcontext()), \
+             patch("openarm_runtime.teleoperation.ClassicBus", return_value=bus) as factory, \
+             patch("openarm_runtime.teleoperation.check_modes"), \
+             patch("openarm_runtime.arm.time.sleep"):
+            try:
+                session.start(1, ("right",))
+                deadline = time.monotonic() + 3
+                while not collection.ready and time.monotonic() < deadline:
+                    threading.Event().wait(.01)
+                self.assertTrue(collection.ready, session.message)
+                collection.start("test", "operator")
+                threading.Event().wait(.15)
+                path = collection.finish()
+                self.assertTrue(session.busy)
+                self.assertEqual(bus.enabled, set(range(1, 9)))
+                self.assertEqual(inspect_episode(path)["state"], "review")
+                collection.review("success")
+                factory.assert_called_once_with("can0", .04)
+            finally:
+                session.close()
+        self.assertFalse(bus.enabled)
+
     def test_dual_preflight_failure_enables_neither_arm(self):
         reader = Mock(snapshot=Mock(side_effect=lambda: (self.sample(), "", 1)))
         session = Teleoperation(Profile("can1", "can0", True), self.mapping,

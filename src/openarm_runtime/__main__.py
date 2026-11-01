@@ -22,6 +22,7 @@ def main():
     leader.add_argument("--port", type=int, default=8890)
     leader.add_argument("--follow", action="store_true", help="Add operator-started physical follower controls")
     leader.add_argument("--report-root", type=Path)
+    leader.add_argument("--collection-profile", type=Path, help="Enable episode controls and own configured acquisition devices")
     commands.add_parser("check", help="Read-only: verify both Classic buses and disabled motors")
     calibration = commands.add_parser("calibrate", help="Move one v2 arm, find stops and write hardware zeros (experimental)")
     calibration.add_argument("--side", choices=("left", "right"), required=True)
@@ -63,7 +64,13 @@ def main():
     platform.add_argument("--profile", type=Path, help="External platform service configuration")
     platform.add_argument("--port", type=int, help="Override the platform port (default 8888)")
     platform.add_argument("--attach-only", action="store_true", help="Only display existing services; never start or stop them")
+    from openarm_collection.cli import configure as configure_collection
+    configure_collection(commands.add_parser("collection", help="Inspect, review and export demonstration episodes"))
     args = parser.parse_args()
+    if args.command == "collection":
+        from openarm_collection.cli import run
+        run(args)
+        return
     if args.command == "gravity":
         from .gravity import load_gravity, diagnose_episode
         if args.episode and args.side is None:
@@ -157,6 +164,8 @@ def main():
         prepare(args.asset_root)
         return
     if args.command == "leader":
+        if args.collection_profile and not args.follow:
+            parser.error("--collection-profile requires --follow")
         if args.follow and (args.config is None or args.report_root is None):
             parser.error("leader --follow requires --config and --report-root")
         if not 1024 <= args.port <= 65535:
@@ -169,7 +178,12 @@ def main():
         previous = signal.signal(signal.SIGTERM, shutdown_leader)
         try:
             options = {"control_profile": Profile.load(args.config), "report_root": args.report_root} if args.follow else {}
-            serve_leader(args.asset_root, args.left_port, args.right_port, args.calibration, args.port, **options)
+            from contextlib import ExitStack
+            with ExitStack() as stack:
+                if args.collection_profile:
+                    from openarm_collection.sources import configured
+                    options["collection"] = stack.enter_context(configured(args.collection_profile))
+                serve_leader(args.asset_root, args.left_port, args.right_port, args.calibration, args.port, **options)
         finally:
             signal.signal(signal.SIGTERM, previous)
         return

@@ -8,6 +8,12 @@ Python 3.12 · MIT · Linux SocketCAN for followers · Independent community pro
 
 ## Policy execution and gravity compensation
 
+Operator-driven [teleoperation data collection](docs/collection.md) adds explicit
+episode recording/review, native-time robot/camera/tactile archives, quality checks
+and offline aligned/LeRobot export. Enable it with `leader --follow
+--collection-profile /path/to/collection.json`; rehearse without hardware using
+`examples/collect_simulated.py`.
+
 Optional [physical gravity compensation](docs/gravity.md) adds shared model-based
 feedforward to hold, teleoperation and policy control, with shadow diagnostics and
 per-machine configuration. Install the `gravity` extra; active physical validation

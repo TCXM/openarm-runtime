@@ -97,6 +97,7 @@ class TactileReader:
         self._state, self._error = "waiting", None
         self._sample, self._received = None, None
         self._sequence, self._rate = 0, 0.0
+        self.on_sample = None
 
     def snapshot(self):
         with self._lock:
@@ -136,6 +137,8 @@ class TactileReader:
                 self._sequence += 1
                 self._rate = (count - 1) / max(0.001, self._received - started)
                 self._state, self._error = "live", None
+            if self.on_sample is not None:
+                self.on_sample(sample, self._sequence, self._received)
             self._stop.wait(max(0, 1 / 60 - (time.monotonic() - tick)))
 
     def _run(self):

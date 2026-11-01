@@ -12,7 +12,7 @@ from .transport import Reader
 from .calibration import collect_stable
 
 
-def serve(asset_root, left, right, calibration, port=8890, *, control_profile=None, report_root=None):
+def serve(asset_root, left, right, calibration, port=8890, *, control_profile=None, report_root=None, collection=None):
     import numpy as np
     import viser
 
@@ -140,7 +140,8 @@ def serve(asset_root, left, right, calibration, port=8890, *, control_profile=No
         if control_profile is not None:
             from openarm_runtime.teleoperation import attach
             teleop, refresh_teleop = attach(server, control_profile, mapping, readers, report_root,
-                                           lock, lambda: busy, lambda: mapping.path.exists() and mapping.data == saved_data)
+                                           lock, lambda: busy, lambda: mapping.path.exists() and mapping.data == saved_data,
+                                           collection=collection)
         for reader in readers.values():
             reader.start()
         print(f"Leader virtual teleoperation http://127.0.0.1:{port}", flush=True)
