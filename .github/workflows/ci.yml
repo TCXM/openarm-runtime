@@ -46,6 +46,7 @@ jobs:
           cd "$RUNNER_TEMP"
           "$RUNNER_TEMP/runtime-test/bin/python" -I -m unittest discover -s "$GITHUB_WORKSPACE/tests" -p 'test_platform*.py'
           "$RUNNER_TEMP/runtime-test/bin/python" -I -m unittest discover -s "$GITHUB_WORKSPACE/tests" -p 'test_gravity.py'
+          "$RUNNER_TEMP/runtime-test/bin/python" -I -m unittest discover -s "$GITHUB_WORKSPACE/tests" -p 'test_policy*.py'
       - name: Test optional video from installed wheel
         env:
           OPENARM_EXPECT_INSTALLED: '1'
@@ -58,6 +59,7 @@ jobs:
           PY
           cd "$RUNNER_TEMP"
           "$RUNNER_TEMP/runtime-test/bin/python" -I -m unittest discover -s "$GITHUB_WORKSPACE/tests" -p 'test_video*.py'
+          "$RUNNER_TEMP/runtime-test/bin/python" -I -m unittest discover -s "$GITHUB_WORKSPACE/tests" -p 'test_collection*.py'
           "$RUNNER_TEMP/runtime-test/bin/python" "$GITHUB_WORKSPACE/examples/read_video.py" --help
       - name: Test optional tactile SDK from installed wheel
         env:

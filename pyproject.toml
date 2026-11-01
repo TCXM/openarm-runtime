@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "openarm-runtime"
-version = "0.7.0"
+version = "0.8.1"
 description = "Reusable OpenArm Classic CAN control, Feetech leader readout, tactile/video capture and optional Viser tools"
 readme = "README.md"
 license = "MIT"
@@ -15,9 +15,9 @@ requires-python = ">=3.12,<3.13"
 dependencies = []
 
 [project.urls]
-Repository = "https://github.com/TCXM/openarm-runtime"
-Issues = "https://github.com/TCXM/openarm-runtime/issues"
-Changelog = "https://github.com/TCXM/openarm-runtime/blob/main/CHANGELOG.md"
+Repository = "https://github.com/Edge-Intelligence-Lab/openarm-runtime"
+Issues = "https://github.com/Edge-Intelligence-Lab/openarm-runtime/issues"
+Changelog = "https://github.com/Edge-Intelligence-Lab/openarm-runtime/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 gravity = ["pin==4.1.0"]

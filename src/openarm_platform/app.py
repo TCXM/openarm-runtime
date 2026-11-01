@@ -193,6 +193,11 @@ def create_app(config, manager=None, *, attach_only=False, with_ui=True):
     gateway.install(app)
     if with_ui:
         from .policy_view import build_policy_view
+        from .collection_view import build_collection_view
+
+        @ui.page('/collection', title='数采可视化 · OpenArm')
+        async def collection_page():
+            build_collection_view(config.collection_root)
 
         @ui.page('/policy', title='策略可视化 · OpenArm')
         async def policy_page():

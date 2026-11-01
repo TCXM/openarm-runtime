@@ -47,6 +47,19 @@ class FakeBus:
 
 
 class ArmTests(unittest.TestCase):
+    def test_collection_observer_separates_before_command_and_feedback(self):
+        bus = FakeBus()
+        samples = []
+        with patch("openarm_runtime.arm.time.sleep"):
+            with ArmHold(bus, lambda: False, Mock(), Mock(), tracking=True, observe=samples.append) as arm:
+                arm.track(dict.fromkeys(IDS, .1))
+                sample = samples[-1]
+                self.assertEqual(sample["observation_before"][1]["position"], 0)
+                self.assertEqual(sample["targets_rad"][1], .1)
+                self.assertEqual(sample["feedback"][1]["position"], .1)
+                self.assertLessEqual(sample["dispatch_started_at"], sample["exchange_completed_at"])
+        self.assertFalse(bus.enabled)
+
     def test_tracking_sends_direct_targets_without_manual_limits(self):
         bus = FakeBus()
         with patch("openarm_runtime.arm.time.sleep"):
@@ -86,7 +99,7 @@ class ArmTests(unittest.TestCase):
                 arm.tick(offsets, 1, 0.05)
                 self.assertAlmostEqual(bus.last_targets[3], math.radians(0.05))
                 self.assertTrue(all(bus.last_targets[mid] == 0 for mid in IDS if mid != 3))
-                self.assertEqual(FOLLOWER_KP[2], 240)
+                self.assertEqual(FOLLOWER_KP[2], 70)
         self.assertFalse(bus.enabled)
 
     def test_cancel_in_hold_disables_whole_arm(self):

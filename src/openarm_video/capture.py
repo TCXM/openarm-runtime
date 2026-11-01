@@ -46,6 +46,7 @@ class CameraReader:
         self._error = ""
         self._cleanup_error = ""
         self._closed = False
+        self.on_sample = None  # Optional nonblocking acquisition sink; borrows this owner.
 
     def start(self):
         with self._lifecycle:
@@ -97,6 +98,8 @@ class CameraReader:
                         self._count += 1
                         self._frame = replace(sample, sequence=self._count)
                         self._error = ""
+                    if self.on_sample is not None:
+                        self.on_sample(self._frame, self._count)
                     self._stop.wait(max(0, 1 / self.config.fps - (time.monotonic() - started)))
             except Exception as exc:
                 if not self._stop.is_set():

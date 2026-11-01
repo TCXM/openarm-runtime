@@ -1,0 +1,20 @@
+{
+  "root": "/path/to/datasets/openarm/raw",
+  "capacity": 512,
+  "max_bytes": 268435456,
+  "video_profile": "/path/to/video.json",
+  "tactile": {
+    "left_pad_a": {
+      "device": "/dev/serial/by-id/REPLACE_SENSOR_A",
+      "baudrate": 921600,
+      "device_id": 2,
+      "identity": {"serial": "REPLACE_SENSOR_A", "mount": "left_gripper_pad_a"}
+    },
+    "left_pad_b": {
+      "device": "/dev/serial/by-id/REPLACE_SENSOR_B",
+      "baudrate": 921600,
+      "device_id": 2,
+      "identity": {"serial": "REPLACE_SENSOR_B", "mount": "left_gripper_pad_b"}
+    }
+  }
+}

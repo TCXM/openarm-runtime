@@ -1,12 +1,41 @@
 # Changelog
 
-## Unreleased — local v0.7.0 integration
+## 0.8.1 — 2026-11-01
 
-- Merge v0.7.0 policy/gravity support with retained motor-control calibration,
-  absolute manual targets, queued reporting and read-only CAN recovery.
-- Add same-origin policy visualization, simulated sessions and bounded recording
-  replay to the platform, including attach-only mode.
+- Add same-origin collection visualization at `/#collection`: fresh/stale
+  recording status, stream activity and writer queues, plus read-only episode
+  inspection, causal camera/tactile/joint playback and acceptance/quality labels.
+  A best-effort status publisher stays separate from native acquisition; recording
+  controls reuse the existing teleoperation owner.
+- Integrate policy visualization into the platform at `/#policy`: built-in
+  simulated sessions, submitted-target/feedback curves, inference latency and
+  bounded episode replay, available through the same port in attach-only mode.
+- Preserve calibrated absolute J1–J7 manual controls, trajectory/effort checks,
+  queued motor reports and the calibration trajectory without encoder-zero writes.
+  Integrate these with v0.8.0's official gains and acquisition observer while
+  keeping pre-command observations and post-command feedback separate.
+- Retain v0.8.0 demonstration collection, synchronized return-to-zero workflow,
+  native recording and export; preserve read-only CAN reconnection recovery.
+- Validate merged behavior with offline fake-device tests, installed-wheel tests
+  and browser simulation/replay. This release adds no new physical-motion trial.
 
+## 0.8.0 — 2026-11-01
+
+- Add opt-in teleoperation demonstration collection: native acquisition sinks,
+  bounded asynchronous recording, operator episode review, provenance/quality,
+  read-only crash inspection, causal alignment and optional LeRobot export.
+  Include integrated camera previews and offline simulated operator rehearsal.
+  Complete operator-run dual-arm collection trials with three RGB cameras and
+  two tactile pads, preserving native timelines and explicit episode acceptance.
+- Add operator-triggered synchronized follower return to zero (J1–J7, peak
+  commanded speed 5 degrees/s, gripper held), followed by relative takeover from
+  the leader's current pose. No precise leader alignment or firmware-zero writes.
+  Exclude recording during return/hold and retain stop/disconnect disable cleanup.
+- Use official Enactic OpenArm v2 J1–J7 PD gains in shared follower hold/tracking;
+  retain existing gripper gains. Operator trials validate the workflow; tracking
+  error remains motion-dependent, not a full-workspace accuracy guarantee.
+- Move diagnostic report writing off the CAN control loop and record dispatched
+  gains, commands, pre-command observations and post-command feedback separately.
 
 ## 0.7.0 — 2026-11-01
 

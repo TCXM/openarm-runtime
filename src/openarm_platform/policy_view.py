@@ -3,6 +3,8 @@ import asyncio
 import math
 import time
 
+from openarm_runtime import __version__
+
 STATES = {'idle': '等待策略', 'starting': '初始化', 'running': '运行中',
           'stopped': '已结束', 'failed': '已停止 · 异常', 'incomplete': '记录未结束'}
 
@@ -68,7 +70,7 @@ class PolicyView:
             with ui.row().classes('policy-toolbar'):
                 with ui.column().classes('gap-1 grow'):
                     ui.label('策略可视化').classes('text-2xl font-semibold')
-                    ui.label('OpenArm 0.7.0 · 仿真与记录回放').classes('text-sm text-grey-7')
+                    ui.label(f'OpenArm {__version__} · 仿真与记录回放').classes('text-sm text-grey-7')
                 self.source = ui.badge('等待策略', color='primary').props('data-testid=policy-source')
             with ui.row().classes('policy-metrics'):
                 self.metrics = {}

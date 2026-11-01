@@ -1,7 +1,7 @@
 # OpenArm Platform
 
 `openarm-runtime platform` brings motor control, teleoperation, tactile and
-vision and policy visualization into one local workspace at **http://127.0.0.1:8888**. Use the sidebar to
+vision, collection and policy visualization into one local workspace at **http://127.0.0.1:8888**. Use the sidebar to
 open each module; all pages, images and WebSocket connections pass through this
 one address. The dashboard uses NiceGUI components on FastAPI/Uvicorn, and
 aiohttp handles upstream HTTP, streaming responses and WebSocket connections.
@@ -14,7 +14,7 @@ The platform is available from v0.6.0. In a Python 3.12 environment, install
 the optional platform dependencies and configure the machine as described below:
 
 ```sh
-python -m pip install "openarm-runtime[platform] @ git+https://github.com/TCXM/openarm-runtime.git@v0.6.0"
+python -m pip install "openarm-runtime[platform] @ git+https://github.com/Edge-Intelligence-Lab/openarm-runtime.git@v0.8.1"
 openarm-runtime platform --profile ~/.config/openarm-runtime/platform.json
 ```
 
@@ -175,14 +175,14 @@ report synchronized hardware data or certify that a motor is disabled.
 
 ## Policy visualization
 
-This integration branch adds an internal **策略可视化** module at
+The platform includes an internal **策略可视化** module at
 `http://127.0.0.1:8888/#policy`; `/policy` opens it without the dashboard shell.
 It uses the same NiceGUI server and needs no extra port or device service.
 Existing platform profiles continue to work. The page is also available in
 `--attach-only` mode and does not switch or stop a hardware module.
 
 - Start the built-in J1 sine or hold-pose simulation (1–60 seconds). The page
-  runs a v0.7.0 `PolicySession`, process-isolated inference and `SimulatedRobot`.
+  runs a `PolicySession`, process-isolated inference and `SimulatedRobot`.
   Simulation is an ideal position plant, not measured hardware performance.
 - Choose a joint to compare submitted targets with timestamped feedback
   observations. The page also shows the latest inference latency and command
@@ -202,3 +202,37 @@ One simulated session is shared by all browser views. Closing a tab leaves the
 bounded simulation running; Stop or server shutdown cancels it and closes the
 inference worker. Physical policy execution remains an explicit CLI/API operation
 as documented in [policy.md](policy.md).
+
+## Collection visualization
+
+Open **数采可视化** at `/#collection`, or `/collection` for the standalone page
+on the same server. No additional device process or port is created. The page
+also works in `--attach-only` mode. “进入遥操录制” selects the existing teleoperation
+view through the dashboard; starting/stopping/reviewing an episode stays with
+that view's owner and the original control lifecycle.
+
+Set `collection_root` in the external platform JSON to the raw collection root.
+If omitted, the platform reads `root` from the teleop command's
+`--collection-profile` file when available, otherwise uses `~/openarm-collection`.
+The viewer never starts acquisition to discover a directory.
+
+Every `Collection` instance publishes a small status snapshot under
+`ROOT/.runtime/INSTANCE.json` every 0.5 seconds, in a separate best-effort thread.
+It includes state, task/operator, duration, stream sequence/age and pending
+writer queue size. Publishers never serialize camera images or perform I/O on
+the CAN thread. Preview write failure does not stop raw acquisition; snapshots
+older than three seconds are displayed as stale rather than current recording
+state. Existing v0.8.0 processes need to restart on v0.8.1 to publish status.
+
+Select an existing episode to view its task, acceptance and quality issues, then
+play or scrub its native timeline. Camera and tactile samples are selected only
+from timestamps at or before the cursor. Target dispatch and motor feedback
+receipt timestamps remain separate. Camera images are JPEG previews of the
+original lossless arrays; depth previews use a fixed 0–4 m colour scale. Tactile
+XYZ values remain raw counts. Inspecting or playing a record never writes review
+files, changes acceptance, exports training data, or resubmits motor commands.
+
+Preview reads at most 128 MiB of journal data and retains the latest 2,000 records
+per stream. Array previews require the optional `video` extra. The common retained
+window is shown on the timeline; array and journal checksum issues remain visible.
+Metadata/status inspection needs no camera, tactile SDK or native CAN SDK.

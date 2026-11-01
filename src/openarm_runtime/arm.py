@@ -10,17 +10,18 @@ from .config import finite
 from .motion import SmoothMotion
 from .limits import joint_bounds_deg, manual_velocity_rad_s, MAX_MANUAL_SPEED_DEG_S
 
-# Adapted LeRobot follower gains: J1..J7, gripper.
-# J1/J2 were reduced locally to 30/1.5; these are not stock Enactic gains.
-FOLLOWER_KP = (30.0, 30.0, 240.0, 240.0, 24.0, 31.0, 25.0, 25.0)
-FOLLOWER_KD = (1.5, 1.5, 3.0, 5.0, 0.3, 0.3, 0.3, 0.3)
+# J1–J7: Enactic openarm_description OpenArm v2 control_gains.yaml.
+# J8 is not specified upstream; retain the existing gripper gains.
+FOLLOWER_KP = (70.0, 70.0, 70.0, 60.0, 10.0, 10.0, 10.0, 25.0)
+FOLLOWER_KD = (2.75, 2.5, 2.0, 2.0, 0.7, 0.6, 0.5, 0.3)
 
 
 class ArmHold:
-    def __init__(self, bus, cancelled, record, publish, *, tracking=False, manual_side=None, gravity=None):
+    def __init__(self, bus, cancelled, record, publish, *, tracking=False, manual_side=None, gravity=None, observe=None):
         self.bus, self.cancelled, self.record, self.publish = bus, cancelled, record, publish
         self.tracking = tracking
         self.gravity = gravity
+        self.observe = observe
         self.manual_bounds = joint_bounds_deg(manual_side) if manual_side is not None else None
         self.motion = None
         if manual_side is not None:
@@ -201,6 +202,7 @@ class ArmHold:
         self._exchange(dict(targets), FOLLOWER_KP, FOLLOWER_KD)
 
     def _exchange(self, targets, kp, kd):
+        before = self.states
         frame = None
         if self.motion:
             frame = {"time_monotonic": time.monotonic(), "targets_rad": dict(targets),
@@ -221,6 +223,7 @@ class ArmHold:
                     frame["gravity"] = self.gravity.last
             if self.motion:
                 self.motion.supervise(self.states, targets, self.bus.ranges, kp, kd, time.monotonic(), feedforward=feedforward)
+            started = time.monotonic()
             states = (self.bus.exchange(targets, kp, kd) if feedforward is None else
                       self.bus.exchange(targets, kp, kd, feedforward))
             if frame is not None:
@@ -240,6 +243,13 @@ class ArmHold:
                     frame["partial_feedback"] = {mid: asdict(s) for mid, s in exc.feedback.items()}
             raise
         self.states, self.targets = states, targets
+        if self.observe is not None:
+            self.observe({"dispatch_started_at": started, "exchange_completed_at": time.monotonic(),
+                          "targets_rad": dict(targets), "kp": tuple(kp), "kd": tuple(kd),
+                          "feedforward_nm": feedforward if feedforward is not None else dict.fromkeys(IDS, 0.0),
+                          "observation_before": {mid: asdict(s) for mid, s in before.items()},
+                          "feedback": {mid: asdict(s) for mid, s in states.items()},
+                          "gravity": self.gravity.last if self.gravity else None})
         self.publish(states)
         self.cycles += 1
         if self.gravity is not None:

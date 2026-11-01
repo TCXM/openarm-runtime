@@ -37,6 +37,18 @@ class PlatformTests(unittest.TestCase):
             self.assertNotIn('cwd', teleop.public())
             self.assertEqual(config.pages[2].extra_ports, (8901, 8902))
 
+    def test_collection_root_follows_teleop_profile_or_explicit_override(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root/'collection.json').write_text(json.dumps({'root': 'episodes'}))
+            data = {'services': {'teleop': {'command': ['python', 'leader', '--collection-profile', 'collection.json']}}}
+            config = self.profile(directory, data)
+            self.assertEqual(config.collection_root, root/'episodes')
+            self.assertEqual(next(p.path for p in config.pages if p.id=='collection'), '/collection')
+            self.assertNotIn('collection', [p.id for p in config.services])
+            data['collection_root'] = 'override'
+            self.assertEqual(self.profile(directory, data).collection_root, root/'override')
+
     def test_rejects_shell_commands_and_port_collisions(self):
         cases = (
             {'services': {'control': {'command': 'echo bad'}}},
@@ -101,7 +113,7 @@ class PlatformApiTests(unittest.TestCase):
             manager.start.assert_called_once()
             response = client.get('/api/config')
             self.assertEqual(response.status_code, 200)
-            self.assertEqual(len(response.json()['pages']), 5)
+            self.assertEqual(len(response.json()['pages']), 6)
             self.assertNotIn('command', response.text)
             self.assertNotIn('cwd', response.text)
             self.assertEqual(client.get('/api/status').json()['services'], client.app.state.coordinator.with_builtin(manager.status.return_value))

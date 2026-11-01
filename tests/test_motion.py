@@ -79,10 +79,10 @@ class MotionTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, 'measured torque'):
                 m.supervise(states | {mid: replace(states[mid], torque=torque)},
                             dict.fromkeys(IDS, 0.), bus.ranges, FOLLOWER_KP, FOLLOWER_KD, 0)
-        # 4 deg tracking error on J3: below tracking threshold, above 9 Nm rated.
+        # At official gains, 4 deg J3 error plus 5 Nm feedforward exceeds its 9 Nm rating.
         with self.assertRaisesRegex(RuntimeError, 'predicted torque'):
             m.supervise(states, dict.fromkeys(IDS, 0.) | {3: math.radians(4)},
-                        bus.ranges, FOLLOWER_KP, FOLLOWER_KD, 0)
+                        bus.ranges, FOLLOWER_KP, FOLLOWER_KD, 0, feedforward={3: 5.0})
 
     def test_tracking_and_sustained_stall_are_distinct_and_stop(self):
         bus, m = FakeBus(), self.motion()

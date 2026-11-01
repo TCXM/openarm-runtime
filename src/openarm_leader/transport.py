@@ -97,6 +97,7 @@ class Reader:
         self.sample = None
         self.error = "等待连接"
         self.count = 0
+        self.on_sample = None
         self.thread = threading.Thread(target=self.run, daemon=True)
 
     def start(self):
@@ -124,6 +125,8 @@ class Reader:
                     with self.lock:
                         self.sample, self.error = sample, ""
                         self.count += 1
+                    if self.on_sample is not None:
+                        self.on_sample(sample, self.count)
                     self.stop.wait(max(0, 1 / 30 - (time.monotonic() - started)))
             except Exception as exc:
                 with self.lock:
