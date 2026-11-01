@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.8.1 — 2026-11-01
+
+- Add same-origin collection visualization at `/#collection`: fresh/stale
+  recording status, stream activity and writer queues, plus read-only episode
+  inspection, causal camera/tactile/joint playback and acceptance/quality labels.
+  A best-effort status publisher stays separate from native acquisition; recording
+  controls reuse the existing teleoperation owner.
+- Integrate policy visualization into the platform at `/#policy`: built-in
+  simulated sessions, submitted-target/feedback curves, inference latency and
+  bounded episode replay, available through the same port in attach-only mode.
+- Preserve calibrated absolute J1–J7 manual controls, trajectory/effort checks,
+  queued motor reports and the calibration trajectory without encoder-zero writes.
+  Integrate these with v0.8.0's official gains and acquisition observer while
+  keeping pre-command observations and post-command feedback separate.
+- Retain v0.8.0 demonstration collection, synchronized return-to-zero workflow,
+  native recording and export; preserve read-only CAN reconnection recovery.
+- Validate merged behavior with offline fake-device tests, installed-wheel tests
+  and browser simulation/replay. This release adds no new physical-motion trial.
+
 ## 0.8.0 — 2026-11-01
 
 - Add opt-in teleoperation demonstration collection: native acquisition sinks,

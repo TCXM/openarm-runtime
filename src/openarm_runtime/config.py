@@ -79,6 +79,21 @@ def require_classic_link(link: dict):
         raise RuntimeError("Expected healthy Classic 1 Mbps, fd off, restart-ms 0; no automatic reconfiguration")
 
 
+def require_classic_read_link(link: dict):
+    """Permit bounded reads to clear historical warnings, never reconfigure a bus.
+
+    Motion still uses require_classic_link, including its zero-error requirement.
+    Passive, bus-off, down and unknown states cannot start a read attempt.
+    """
+    info = link.get("linkinfo", {}).get("info_data", {})
+    if info.get("state") not in ("ERROR-ACTIVE", "ERROR-WARNING"):
+        raise RuntimeError("Classic read requires ERROR-ACTIVE or ERROR-WARNING; no automatic restart")
+    normalized = {**link, "linkinfo": {**link.get("linkinfo", {}), "info_data": {
+        **info, "state": "ERROR-ACTIVE", "berr_counter": {"tx": 0, "rx": 0},
+    }}}
+    require_classic_link(normalized)
+
+
 @contextmanager
 def bus_lease(interface: str, exclusive: bool):
     """Advisory lock shared by our viewer/check/control processes, not third-party tools."""

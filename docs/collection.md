@@ -192,3 +192,10 @@ Recording is unavailable during return/hold; end an active
 recording before requesting another return. Stop/disconnect retains disable cleanup.
 This joint-space return does not plan around obstacles: clear its path before
 clicking the button. Real hardware return remains an operator-run acceptance check.
+
+## Unified platform preview (v0.8.1)
+
+Use the platform's **数采可视化** module to monitor the collecting process and
+replay existing native archives. See [configuration and preview boundaries](platform.md#collection-visualization).
+Status snapshots under `.runtime/` are diagnostic state, not dataset episodes;
+raw manifests, samples and array payloads retain `openarm.collection/1` format.

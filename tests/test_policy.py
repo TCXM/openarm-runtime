@@ -33,7 +33,9 @@ class SlowPolicy(HoldPolicy):
 class SinglePolicy(HoldPolicy):
     def infer(self, observation):
         chunk = super().infer(observation)
-        return replace(chunk, steps=chunk.steps[:1], period_s=0.2)
+        # Match HoldPolicy's one-second horizon when comparing action shapes.
+        # Expiry itself is covered with explicit timestamps in the contract tests.
+        return replace(chunk, steps=chunk.steps[:1], period_s=1.0)
 
 
 class SlowResetPolicy(HoldPolicy):
@@ -224,8 +226,17 @@ class PolicyTests(unittest.TestCase):
             def close(self): pass
         robot = SimulatedRobot(("left",))
         robot.spec = ActionSpec(robot.spec.names, (-1,) * 8, (1,) * 8)
-        with patch("openarm_policy.session.InferenceWorker", Worker):
-            PolicySession(robot, HoldPolicy(), config=SessionConfig(inference_hz=2)).run(.95)
+        session = PolicySession(robot, HoldPolicy(), config=SessionConfig(inference_hz=2))
+        # This tests activation timestamps, not host scheduler throughput. The
+        # worker is synchronous here, so advance a shared monotonic clock at wait.
+        clock = [100.0]
+        def advance(seconds):
+            clock[0] += seconds
+            return False
+        with patch("openarm_policy.session.InferenceWorker", Worker), \
+             patch("time.monotonic", side_effect=lambda: clock[0]), \
+             patch.object(session.cancel, "wait", side_effect=advance):
+            session.run(.95)
         qs = [v[0] for _, v in robot.commands]
         self.assertIn(.05, qs)
         self.assertIn(.1, qs)

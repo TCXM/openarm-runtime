@@ -9,7 +9,7 @@ import json
 
 
 ICONS = {'control': 'tune', 'teleop': 'precision_manufacturing',
-         'tactile': 'touch_app', 'vision': 'videocam'}
+         'tactile': 'touch_app', 'vision': 'videocam', 'policy': 'timeline', 'collection': 'storage'}
 STATUS_LABELS = {'running': '服务可达', 'external': '服务可达', 'starting': '启动中',
                  'standby': '待切换', 'stopped': '已停止', 'unconfigured': '未配置',
                  'error': '服务异常'}
@@ -99,7 +99,7 @@ class Dashboard:
                 with tag(ui.column().classes('platform-overview'), 'overview') as self.overview_panel:
                     ui.label('YOUR ROBOTICS WORKSPACE').classes('eyebrow')
                     tag(ui.label(config_title).classes('overview-title'), 'overview-title')
-                    ui.label('电机控制、遥操、触觉与视觉，一个地址即可使用。').classes('overview-description')
+                    ui.label('电机控制、遥操、感知、数采与策略，一个地址即可使用。').classes('overview-description')
                     with tag(ui.grid(columns=2).classes('module-grid'), 'module-grid'):
                         for index, page in enumerate(self.pages.values(), 1):
                             with ui.card().classes('module-card'):
@@ -121,7 +121,7 @@ class Dashboard:
                         ui.label('服务就绪后自动显示模块。').classes('waiting-description')
                 self.views.set_visibility(False)
                 with ui.row().classes('platform-footer'):
-                    self.footer = tag(ui.label('四个模块 · 同一个工作空间'), 'footer-caption')
+                    self.footer = tag(ui.label(f'{len(self.pages)} 个模块 · 同一个工作空间'), 'footer-caption')
                     tag(ui.button('连接帮助', icon='north_east', on_click=self.show_connection)
                         .props('flat dense no-caps').classes('footer-help'), 'footer-connection')
         with tag(ui.dialog(), 'connection-dialog') as self.connection_dialog:
@@ -271,7 +271,7 @@ class Dashboard:
             if self.active not in self.frames:
                 with self.views:
                     element = self.ui.element('iframe').props(
-                        f'src=/apps/{page.id}/ title="{page.label} · OpenArm" allowfullscreen'
+                        f'src={page.path or f"/apps/{page.id}/"} title="{page.label} · OpenArm" allowfullscreen'
                     ).classes('module-frame')
                     self.identify(element, f'frame-{page.id}')
                 self.frames[self.active] = FrameView(element, generation)
@@ -309,7 +309,7 @@ class Dashboard:
             self.current_label.set_text(page.label)
             self.current_status.set_text('状态未知' if self.status_error else '服务可达' if ready else STATUS_LABELS.get(state.get('state'), '状态未知'))
             self.reload.set_enabled(ready and not self.busy)
-            self.external.props(f'href=/apps/{page.id}/ aria-disabled={str(not ready or self.busy).lower()} tabindex={-1 if not ready or self.busy else 0}')
+            self.external.props(f'href={page.path or f"/apps/{page.id}/"} aria-disabled={str(not ready or self.busy).lower()} tabindex={-1 if not ready or self.busy else 0}')
             self.external.classes(add='disabled-link' if not ready or self.busy else '', remove='' if not ready or self.busy else 'disabled-link')
             if not message:
                 if self.status_error:
@@ -325,10 +325,10 @@ class Dashboard:
                     }.get(state.get('state'), f'{page.label}暂时不可达，请检查模块连接。')
             self.waiting_title.set_text(('正在启动' if state.get('state') == 'starting' else '等待') + page.label)
             self.footer.set_text('控制与遥操共享电机连接 · 切换模式会执行原有停止流程' if page.exclusive_group
-                                 else '切换到感知页面会保留当前控制或遥操连接')
+                                 else '数采页显示录制状态与历史数据 · 当前设备连接保持不变' if page.id == 'collection' else '策略页支持仿真和记录回放 · 当前设备连接保持不变' if page.path else '切换到感知页面会保留当前控制或遥操连接')
         else:
             self.current_label.set_text('概览')
-            self.footer.set_text('四个模块 · 同一个工作空间')
+            self.footer.set_text(f'{len(self.pages)} 个模块 · 同一个工作空间')
         self.notice.set_text(message)
         self.notice.set_visibility(bool(message))
         self._sync_frames()

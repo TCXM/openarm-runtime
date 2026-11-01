@@ -122,6 +122,7 @@ class ArmTests(unittest.TestCase):
     def test_other_browser_cannot_change_target(self):
         session = MotionSession(Profile("can1", "can0"), {}, "/unused")
         session.ready, session.owner, session.side = True, 1, "right"
+        session.base = dict.fromkeys(IDS, 0.0)
         for owner, side in ((2, "right"), (1, "left")):
             with self.assertRaises(RuntimeError):
                 session.set_target(owner, side, 1, 30)

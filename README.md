@@ -8,6 +8,18 @@ Python 3.12 · MIT · Linux SocketCAN for followers · Independent community pro
 
 ## Policy execution and gravity compensation
 
+The platform also provides **数采可视化** at `/#collection`: recording state,
+stream updates and writer queues, then camera/tactile/joint playback from native
+collection archives. Recording controls remain in the existing teleoperation
+page. See [collection visualization](docs/platform.md#collection-visualization).
+
+The platform includes **策略可视化** to the platform at `/#policy`
+(standalone same-origin page: `/policy`). It displays submitted targets and
+recorded feedback separately, inference latency and a joint timeline. Built-in
+simulated policies and episode replay work in `--attach-only` mode. This page
+uses the version 1 policy contracts; it does not launch the Classic motor backend.
+See [platform policy visualization](docs/platform.md#policy-visualization).
+
 Operator-driven [teleoperation data collection](docs/collection.md) adds explicit
 episode recording/review, native-time robot/camera/tactile archives, quality checks
 and offline aligned/LeRobot export. Enable it with `leader --follow
@@ -43,10 +55,10 @@ python3.12 -m venv .venv
 source .venv/bin/activate
 
 # Core: state types, software mapping and control API; no GUI or hardware SDK.
-pip install "openarm-runtime @ git+https://github.com/TCXM/openarm-runtime.git@v0.7.0"
+pip install "openarm-runtime @ git+https://github.com/Edge-Intelligence-Lab/openarm-runtime.git@v0.8.1"
 
 # Serial leader readout, with a browser-based virtual robot.
-pip install "openarm-runtime[leader,viewer] @ git+https://github.com/TCXM/openarm-runtime.git@v0.7.0"
+pip install "openarm-runtime[leader,viewer] @ git+https://github.com/Edge-Intelligence-Lab/openarm-runtime.git@v0.8.1"
 ```
 
 Extras compose freely:
@@ -70,7 +82,7 @@ project's environment. With uv, declare and lock the dependency directly:
 
 ```sh
 # Run in your own Python 3.12 project.
-uv add "openarm-runtime[leader,viewer] @ git+https://github.com/TCXM/openarm-runtime.git@v0.7.0"
+uv add "openarm-runtime[leader,viewer] @ git+https://github.com/Edge-Intelligence-Lab/openarm-runtime.git@v0.8.1"
 ```
 
 **Modify the runtime while developing your application:** clone the source
@@ -115,7 +127,7 @@ configure the machine once using [platform.example.json](platform.example.json),
 then launch:
 
 ```sh
-python -m pip install "openarm-runtime[platform] @ git+https://github.com/TCXM/openarm-runtime.git@v0.7.0"
+python -m pip install "openarm-runtime[platform] @ git+https://github.com/Edge-Intelligence-Lab/openarm-runtime.git@v0.8.1"
 openarm-runtime platform --profile ~/.config/openarm-runtime/platform.json
 ```
 
@@ -270,7 +282,7 @@ ssh -N -L 8890:127.0.0.1:8890 -L 8891:127.0.0.1:8891 your-workstation
 Video is available starting with v0.3.0:
 
 ```sh
-python -m pip install "openarm-runtime[video] @ git+https://github.com/TCXM/openarm-runtime.git@v0.7.0"
+python -m pip install "openarm-runtime[video] @ git+https://github.com/Edge-Intelligence-Lab/openarm-runtime.git@v0.8.1"
 # No cameras or vendor SDK required; clearly labelled SIMULATION.
 openarm-runtime video --simulate --port 5004
 ```
@@ -346,12 +358,20 @@ readback test on the development rig; quantified accuracy and repeatability are
 not yet established. Read the [operator guide](docs/calibration.md) for the
 required starting pose, motion sequence, stop behavior and partial-write recovery.
 
+The motor-control panel also provides **自动标定（不写零位）**, available
+as `calibrate --no-write-zero` or `calibrate_arm(..., write_zero=False)`. It runs
+the same stop-seeking motion and disables at completion, preserving encoder zeros.
+The final pose need not read as zero in the existing encoder coordinates.
+
 ## Scope
 
 The working baseline covers eight motors per follower arm, Classic CAN,
 whole-arm hold/relative targets, two STS3215 leader buses and virtual pose mapping.
-Manual control uses validated fixed gains, ±30° relative offsets and
-0.1–5°/s target speed. See [validation](docs/validation.md) for measured evidence.
+The manual-control panel provides calibrated absolute J1–J7 angle sliders
+and a ±30° relative gripper offset, with 0.1–5°/s target speed and 10°/s²
+acceleration smoothing. Its fixed gains, feedback checks, queued reports and
+read-only CAN reconnect are retained. The default `hold_arm()` API keeps its
+±30° relative offsets. See [validation](docs/validation.md) for measured evidence.
 
 Long-duration dual-arm acceptance, collision avoidance, quantified
 calibration accuracy and long-term reliability are future work. Firmware encoding
@@ -380,7 +400,7 @@ examples in `examples/`. [Changelog](CHANGELOG.md) · [Provenance](ORIGIN.md) ·
 Paxini IP-M2324-Core (68 points) with the single-channel USB serial converter:
 
 ```sh
-pip install "openarm-runtime[tactile,viewer] @ git+https://github.com/TCXM/openarm-runtime.git@v0.7.0"
+pip install "openarm-runtime[tactile,viewer] @ git+https://github.com/Edge-Intelligence-Lab/openarm-runtime.git@v0.8.1"
 openarm-runtime tactile --device /dev/serial/by-id/YOUR_CONVERTER --device-id 2 --port 8891
 ```
 

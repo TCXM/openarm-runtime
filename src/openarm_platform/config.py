@@ -1,5 +1,5 @@
 """External launch configuration for the local platform; no hardware imports."""
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 import json
 from pathlib import Path
 import sys
@@ -22,17 +22,19 @@ def valid_port(value):
 class Page:
     id: str
     label: str
-    port: int
+    port: int | None
     description: str = ''
     command: tuple[str, ...] = ()
     cwd: Path | None = None
     exclusive_group: str | None = None
     extra_ports: tuple[int, ...] = ()
 
+    path: str | None = None
+
     def public(self):
         return dict(id=self.id, label=self.label, port=self.port,
                     description=self.description, exclusive_group=self.exclusive_group,
-                    extra_ports=list(self.extra_ports))
+                    extra_ports=list(self.extra_ports), path=self.path)
 
 
 @dataclass(frozen=True)
@@ -42,10 +44,12 @@ class PlatformConfig:
     log_dir: Path
     support: tuple[Page, ...] = ()
     title: str = 'OpenArm Platform'
+    policy_record_root: Path = field(default_factory=lambda: Path.home() / 'openarm-episodes')
+    collection_root: Path = field(default_factory=lambda: Path.home() / 'openarm-collection')
 
     @property
     def services(self):
-        return self.support + self.pages
+        return self.support + tuple(page for page in self.pages if page.path is None)
 
     def with_port(self, port):
         return validate(replace(self, port=valid_port(port)))
@@ -64,7 +68,7 @@ def validate(config):
 
 def load_config(path=None):
     data = {} if path is None else json.loads(Path(path).expanduser().read_text())
-    if not isinstance(data, dict) or set(data) - {'title', 'port', 'services', 'support', 'log_dir'}:
+    if not isinstance(data, dict) or set(data) - {'title', 'port', 'services', 'support', 'log_dir', 'policy_record_root', 'collection_root'}:
         raise ValueError('Invalid platform configuration fields')
     base = Path.cwd() if path is None else Path(path).expanduser().resolve().parent
     entries = data.get('services', {})
@@ -110,6 +114,20 @@ def load_config(path=None):
     title = data.get('title', 'OpenArm Platform')
     if not isinstance(title, str) or not title.strip():
         raise ValueError('title must be a nonempty string')
+    pages.append(Page('collection', '数采可视化', None, '录制状态、数据流质量与多模态回放', path='/collection'))
+    pages.append(Page('policy', '策略可视化', None, '策略仿真、目标与反馈轨迹、记录回放', path='/policy'))
+    collection_root = path_value(data.get('collection_root', '~/openarm-collection'))
+    if 'collection_root' not in data:
+        teleop = next(p for p in pages if p.id == 'teleop')
+        if '--collection-profile' in teleop.command:
+            index = teleop.command.index('--collection-profile') + 1
+            if index < len(teleop.command):
+                profile = Path(teleop.command[index]).expanduser()
+                if not profile.is_absolute():
+                    profile = (teleop.cwd or base) / profile
+                if profile.is_file():
+                    acquisition = json.loads(profile.read_text())
+                    collection_root = (profile.parent / acquisition['root']).resolve()
     return validate(PlatformConfig(valid_port(data.get('port', 8888)), tuple(pages),
                                    path_value(data.get('log_dir', '~/.local/state/openarm-platform')),
-                                   tuple(auxiliary), title))
+                                   tuple(auxiliary), title, path_value(data.get('policy_record_root', '~/openarm-episodes')), collection_root))
