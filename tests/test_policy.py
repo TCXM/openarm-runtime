@@ -90,12 +90,21 @@ class PolicyTests(unittest.TestCase):
     def test_single_and_chunk_policies_use_identical_robot(self):
         for policy in (SinglePolicy(), HoldPolicy()):
             with self.subTest(policy=type(policy).__name__):
-                robot = SimulatedRobot()
+                class CountingRobot(SimulatedRobot):
+                    def submit(self, values, valid_until):
+                        super().submit(values, valid_until)
+                        if len(self.commands) == 4:
+                            session.stop()
+
+                robot = CountingRobot()
                 session = PolicySession(robot, policy)
-                session.run(.6)
+                # Completion is command-driven, not a CI throughput assertion.
+                # Keep a bounded failure path if commands never arrive; the
+                # session's inference/control watchdogs remain unchanged.
+                session.run(5)
                 self.assertEqual(session.state, "stopped")
                 self.assertFalse(robot.started)
-                self.assertGreater(len(robot.commands), 3)
+                self.assertEqual(len(robot.commands), 4)
                 self.assertTrue(all(not any(v) for _, v in robot.commands))
 
     def test_policy_exception_and_timeout_close_robot(self):
