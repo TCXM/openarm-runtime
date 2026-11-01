@@ -59,6 +59,10 @@ def main():
     gravity_input.add_argument("--positions", type=float, nargs=8, metavar="RAD")
     gravity_input.add_argument("--episode", type=Path, help="Recorded policy episode for offline diagnosis")
     gravity.add_argument("--side", choices=("left", "right"), help="Required with --episode")
+    platform = commands.add_parser("platform", help="OpenArm Platform: integrate existing control, teleop, tactile and vision pages")
+    platform.add_argument("--profile", type=Path, help="External platform service configuration")
+    platform.add_argument("--port", type=int, help="Override the platform port (default 8888)")
+    platform.add_argument("--attach-only", action="store_true", help="Only display existing services; never start or stop them")
     args = parser.parse_args()
     if args.command == "gravity":
         from .gravity import load_gravity, diagnose_episode
@@ -75,6 +79,28 @@ def main():
         from openarm_policy.cli import run
         run(args)
         return
+    if args.command == "platform":
+        from openarm_platform import load_config
+        from openarm_platform.app import serve as serve_platform
+        try:
+            config = load_config(args.profile)
+            if args.port is not None:
+                config = config.with_port(args.port)
+        except (OSError, ValueError, TypeError) as exc:
+            parser.error(str(exc))
+
+        def shutdown_platform(signum, frame):
+            raise KeyboardInterrupt(f"Signal {signum}")
+
+        previous = signal.signal(signal.SIGTERM, shutdown_platform)
+        try:
+            serve_platform(config, attach_only=args.attach_only)
+        except KeyboardInterrupt:
+            pass
+        finally:
+            signal.signal(signal.SIGTERM, previous)
+        return
+
     if args.command == "tactile":
         if not 1024 <= args.port <= 65535 or args.baudrate <= 0:
             parser.error("Port must be 1024..65535 and baudrate must be positive")

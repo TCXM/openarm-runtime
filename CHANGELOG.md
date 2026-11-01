@@ -19,6 +19,28 @@
   views, responsive mobile layout, per-view status and browser update FPS.
   Preview settings and optional depth views are collapsed by default.
 
+## 0.6.0 — 2026-10-31
+
+- Add the local OpenArm Platform workspace with unchanged control, teleoperation,
+  tactile and vision subpages, configured single-command startup and independent
+  page connections. One loopback port proxies HTTP, streaming images, Viser
+  WebSockets and both nested tactile views; remote clients need only one SSH
+  forward. Motor control/teleoperation switch exclusively through the existing
+  shutdown paths; external services remain externally owned. Failed sensing
+  services can be retried explicitly from the workspace.
+- Use NiceGUI components and its FastAPI/Uvicorn server for the platform
+  dashboard, with aiohttp managing upstream HTTP and WebSocket connections.
+  Add the optional `platform` extra; core imports and CLI help stay passive.
+  Preserve mounted module views during sensing navigation and keep the existing
+  motor-control lifecycle and exclusive mode switching.
+- Document replacement of standalone launches, one-port SSH access and wrist
+  camera recovery using distinct USB topology paths when device serials collide.
+  Hardware profiles and calibration remain external to the package.
+- Validate the installed platform wheel on Linux and macOS. Browser acceptance
+  covers persistent module views, HTTP/video streaming, WebSockets and clean
+  shutdown with software fixtures; read-only workstation checks display all four
+  cameras and both tactile viewers through the platform port.
+
 ## 0.5.0 — 2026-10-31
 
 - Add the optional `openarm_tactile` capture API and `tactile` extra, pinning the

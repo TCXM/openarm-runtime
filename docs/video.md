@@ -8,7 +8,7 @@ configuration and context-managed lifecycle. Python3.12 is required.
 
 ```sh
 # Pinned release:
-python -m pip install "openarm-runtime[video] @ git+https://github.com/TCXM/openarm-runtime.git@v0.5.0"
+python -m pip install "openarm-runtime[video] @ git+https://github.com/TCXM/openarm-runtime.git@v0.6.0"
 # Or develop this checkout:
 python -m pip install -e ".[video]"
 # Alternatively, for this repository's uv workflow:
@@ -40,6 +40,34 @@ Relative device/helper paths resolve relative to the profile file. `~` expands
 to the current user's home. Unknown fields and duplicate camera names are rejected;
 duplicate RGB devices are rejected by the capture group. Examples contain only
 placeholder paths: machine profiles, firmware, logs and SDK builds stay outside Git.
+
+## Camera paths after USB changes
+
+A reachable video page does not mean its device paths still exist. If only the
+wrist views remain disconnected, compare the external profile with:
+
+```sh
+v4l2-ctl --list-devices
+ls -l /dev/v4l/by-id /dev/v4l/by-path
+```
+
+Check `/status` (or `/apps/vision/status` through the platform), including each
+camera's `details.error`, frame count and frame age. Missing `/dev/camera_*`
+aliases usually require correcting their udev rules or selecting an existing
+stable path explicitly in the external video profile.
+
+Two identical cameras can report the same serial identifier and therefore
+collide under `by-id`. Use distinct `by-path` entries ending in `video-index0`
+for these cameras, and confirm physical left/right assignment from their images.
+USB topology paths survive changing `/dev/videoN` numbers but change when the
+camera or hub moves to a different port; recheck the mapping after such a move.
+Do not silently assign left/right from enumeration order.
+
+The platform's vision service should launch the package's `video --profile`
+command. When replacing the old RGB/depth relay scripts, stop their capture
+processes normally before starting the new owner, then remove obsolete `support`
+entries from the external platform configuration. Keep a copy of both profiles
+for rollback. No machine-specific paths or calibration belong in the repository.
 
 ## Astra Pro depth helper
 

@@ -1,0 +1,225 @@
+"""NiceGUI/FastAPI workspace with one aiohttp gateway and one service owner.
+
+Importing this module is passive and does not require the platform extra.
+"""
+import asyncio
+from contextlib import asynccontextmanager
+import json
+import socket
+from urllib.parse import urlsplit
+
+from .services import ServiceManager
+
+
+class Coordinator:
+    """Keep blocking hardware-process operations off the ASGI event loop.
+
+    Request cancellation does not cancel an in-progress stop/switch. Shutdown
+    waits for those operations before the manager performs its final cleanup.
+    """
+
+    def __init__(self, manager, *, attach_only=False):
+        self.manager = manager
+        self.attach_only = attach_only
+        self.closing = False
+        self._operations = set()
+
+    async def _call(self, function, *args):
+        if self.closing:
+            raise RuntimeError('平台正在关闭，请等待服务停止。')
+        operation = asyncio.create_task(asyncio.to_thread(function, *args))
+        self._operations.add(operation)
+        def finished(task):
+            self._operations.discard(task)
+            if not task.cancelled():
+                task.exception()  # Retrieve errors even if the request disconnected.
+        operation.add_done_callback(finished)
+        return await asyncio.shield(operation)
+
+    async def start(self):
+        if not self.attach_only:
+            await self._call(self.manager.start)
+
+    async def status(self):
+        return await self._call(self.manager.status)
+
+    async def activate(self, name):
+        if self.attach_only:
+            return await self.status()
+        return await self._call(self.manager.activate, name)
+
+    def begin_shutdown(self):
+        self.closing = True
+
+    async def close(self):
+        self.begin_shutdown()
+        if self._operations:
+            await asyncio.gather(*tuple(self._operations), return_exceptions=True)
+        await asyncio.to_thread(self.manager.close)
+
+
+class LocalBoundary:
+    """Protect both framework events and proxied modules on the loopback server."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope['type'] not in ('http', 'websocket'):
+            return await self.app(scope, receive, send)
+        headers = scope.get('headers', [])
+        hosts = [v.decode('latin-1') for k, v in headers if k.lower() == b'host']
+        origins = [v.decode('latin-1') for k, v in headers if k.lower() == b'origin']
+        host = hosts[0] if len(hosts) == 1 else ''
+        try:
+            address = urlsplit('http://' + host)
+            valid = (bool(host) and address.hostname in ('127.0.0.1', 'localhost', '::1')
+                     and address.netloc == host and not address.username and not address.password
+                     and not address.path and not address.query and not address.fragment)
+            _ = address.port  # Reject malformed port syntax.
+        except ValueError:
+            valid = False
+        unsafe = scope['type'] == 'websocket' or scope.get('method') not in ('GET', 'HEAD', 'OPTIONS')
+        if (not valid or (origins and origins != ['http://' + host])
+                or (unsafe and origins != ['http://' + host])):
+            if scope['type'] == 'websocket':
+                await send({'type': 'websocket.close', 'code': 1008})
+            else:
+                body = b'{"error":"Use a localhost address and same-origin requests"}'
+                await send({'type': 'http.response.start', 'status': 403,
+                            'headers': [(b'content-type', b'application/json'),
+                                        (b'content-length', str(len(body)).encode())]})
+                await send({'type': 'http.response.body', 'body': body})
+            return
+
+        async def secured(message):
+            if message['type'] == 'http.response.start':
+                message['headers'] = [(key, value) for key, value in message.get('headers', [])
+                                      if key.lower() not in (b'x-frame-options', b'x-content-type-options')]
+                message['headers'].extend([(b'x-frame-options', b'SAMEORIGIN'),
+                                           (b'x-content-type-options', b'nosniff')])
+            await send(message)
+        await self.app(scope, receive, secured)
+
+
+def create_app(config, manager=None, *, attach_only=False, with_ui=True):
+    """Construct one ASGI application; hardware starts only in its lifespan.
+
+    ``with_ui=False`` is for focused API/gateway tests. Normal platform launches
+    always mount the NiceGUI dashboard. Do not run this app with multiple workers.
+    """
+    try:
+        from fastapi import FastAPI, Request
+        from starlette.responses import JSONResponse
+        from .proxy import Gateway
+        if with_ui:
+            from nicegui import ui
+            from .dashboard import build_dashboard
+    except ImportError as exc:
+        raise RuntimeError('平台需要可选依赖：pip install "openarm-runtime[platform]"') from exc
+
+    if manager is None:
+        manager = ServiceManager(config.services, config.log_dir)
+    coordinator = Coordinator(manager, attach_only=attach_only)
+    gateway = Gateway(config)
+
+    @asynccontextmanager
+    async def lifespan(app):
+        try:
+            await gateway.start()
+            await coordinator.start()
+            yield
+        finally:
+            coordinator.begin_shutdown()
+            try:
+                await gateway.close()
+            finally:
+                try:
+                    await coordinator.close()
+                except BaseException as exc:
+                    app.state.shutdown_error = exc
+                    raise
+
+    app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
+    app.state.gateway = gateway
+    app.state.coordinator = coordinator
+    app.state.shutdown_error = None
+    app.add_middleware(LocalBoundary)
+
+    @app.get('/api/config')
+    async def configuration():
+        return JSONResponse(dict(title=config.title, port=config.port, attach_only=attach_only,
+                                 pages=[p.public() for p in config.pages]),
+                            headers={'Cache-Control': 'no-store'})
+
+    @app.get('/api/status')
+    async def status():
+        try:
+            return JSONResponse({'services': await coordinator.status()}, headers={'Cache-Control': 'no-store'})
+        except RuntimeError as exc:
+            return JSONResponse({'error': str(exc)}, status_code=503)
+
+    @app.post('/api/select')
+    async def select(request: Request):
+        if request.headers.get('content-type', '').split(';')[0].strip() != 'application/json':
+            return JSONResponse({'error': 'Same-origin JSON request required'}, status_code=403)
+        try:
+            content = bytearray()
+            async for chunk in request.stream():
+                content.extend(chunk)
+                if len(content) > 1024:
+                    raise ValueError('Invalid request size')
+            data = json.loads(content)
+            if (not isinstance(data, dict) or set(data) != {'id'} or not isinstance(data['id'], str)
+                    or data['id'] not in {page.id for page in config.pages}):
+                raise ValueError('Select a configured page')
+            return JSONResponse({'services': await coordinator.activate(data['id'])},
+                                headers={'Cache-Control': 'no-store'})
+        except (ValueError, RuntimeError, OSError) as exc:
+            return JSONResponse({'error': str(exc)}, status_code=409)
+
+    gateway.install(app)
+    if with_ui:
+        async def dashboard():
+            await build_dashboard(config, coordinator, attach_only=attach_only)
+        ui.run_with(app, root=dashboard, title=config.title, language='zh-CN',
+                    dark=False, show_welcome_message=False, reconnect_timeout=10,
+                    binding_refresh_interval=None, on_air=None)
+    return app
+
+
+def serve(config, *, attach_only=False):
+    """Run one loopback worker, binding before any service can be launched."""
+    try:
+        import uvicorn
+    except ImportError as exc:
+        raise RuntimeError('平台需要可选依赖：pip install "openarm-runtime[platform]"') from exc
+    # Bind first: an occupied entry port must never trigger child/device startup.
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
+        listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        listener.bind(('127.0.0.1', config.port))
+        listener.listen(128)
+        app = create_app(config, attach_only=attach_only)
+
+        class PlatformServer(uvicorn.Server):
+            async def shutdown(self, sockets=None):
+                app.state.coordinator.begin_shutdown()
+                await app.state.gateway.close()
+                await super().shutdown(sockets=sockets)
+
+        server = PlatformServer(uvicorn.Config(
+            app, host='127.0.0.1', port=config.port, workers=1, reload=False,
+            access_log=False, proxy_headers=False, server_header=False,
+            ws_max_size=64 * 1024 * 1024, timeout_graceful_shutdown=10,
+        ))
+        print(f'OpenArm Platform: http://127.0.0.1:{config.port}', flush=True)
+        print(f'服务日志：{config.log_dir} · Ctrl+C 关闭本次启动的服务', flush=True)
+        try:
+            server.run(sockets=[listener])
+        finally:
+            # Uvicorn re-raises handled signals after cleanup. A CLI interrupt
+            # must not hide a failed hardware-service shutdown.
+            if app.state.shutdown_error is not None:
+                raise RuntimeError('Platform service cleanup failed') from app.state.shutdown_error
+        if not server.started:
+            raise RuntimeError('Platform startup failed; see the startup error above')

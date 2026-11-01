@@ -8,7 +8,9 @@ New optional features should not add heavy dependencies to core imports.
 
 Use Python3.12 and uv. `uv sync --locked` installs an editable core package;
 `uv run --locked python -m unittest discover -s tests` runs offline regressions.
-For UI development, add `--extra viewer --extra leader` to `uv sync`.
+For Viser development, add `--extra viewer --extra leader` to `uv sync`.
+For the unified NiceGUI dashboard and aiohttp gateway, include `--extra platform`
+as well. Keep the extra selections required by the modules you develop.
 For RGB/depth capture and the camera web interface, use `--extra video`; run
 `openarm-runtime video --simulate` for offline browser development.
 For tactile capture, use `--extra tactile`; add `--extra viewer` for visualization.
@@ -20,6 +22,15 @@ checkout into that application's environment in editable mode. The checkout can
 live anywhere; no sibling-directory layout is required. See the README's
 [installation modes](README.md#using-the-package-vs-developing-it) for pip and
 uv commands, when to reinstall, and how to return to a pinned release.
+
+Platform framework tests run with
+`python -m unittest discover -s tests -p 'test_platform*.py'` after installing
+`.[platform]`. They use fake services and local test upstreams, never hardware.
+Core-only tests skip framework integration checks while still checking passive
+imports, configuration and subprocess ownership. CI validates both the core
+wheel and the optional platform extra outside the checkout. Browser acceptance
+should exercise persistent views, real Viser WebSocket events, both nested
+tactile viewers and camera images through one port using software fixtures.
 
 Tests must not open physical hardware. Test behavior at transport boundaries,
 including exception cleanup, rather than copying implementation details.

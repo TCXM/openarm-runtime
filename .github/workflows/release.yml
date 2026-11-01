@@ -37,6 +37,18 @@ jobs:
           "$RUNNER_TEMP/runtime-test/bin/python" -m pip install dist/*.whl
           cd "$RUNNER_TEMP"
           "$RUNNER_TEMP/runtime-test/bin/python" -I -m unittest discover -s "$GITHUB_WORKSPACE/tests"
+      - name: Verify optional platform from release wheel
+        env:
+          OPENARM_EXPECT_INSTALLED: '1'
+        run: |
+          "$RUNNER_TEMP/runtime-test/bin/python" - <<'PY'
+          from pathlib import Path
+          import subprocess, sys
+          wheel = next(Path('dist').glob('*.whl')).resolve()
+          subprocess.run([sys.executable, '-m', 'pip', 'install', str(wheel) + '[platform]'], check=True)
+          PY
+          cd "$RUNNER_TEMP"
+          "$RUNNER_TEMP/runtime-test/bin/python" -I -m unittest discover -s "$GITHUB_WORKSPACE/tests" -p 'test_platform*.py'
       - name: Publish artifacts
         env:
           GH_TOKEN: ${{ github.token }}

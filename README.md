@@ -26,6 +26,8 @@ See [policy contracts, adapters, recording and physical execution](docs/policy.m
 Offline tests and an operator-authorized right-arm policy/gravity trial passed.
 See [measured results and remaining validation boundaries](docs/gravity.md#physical-right-arm-trials).
 
+**[中文使用文档 / Wiki](https://github.com/TCXM/openarm-runtime/wiki/Home)** · [常用命令](https://github.com/TCXM/openarm-runtime/wiki/CLI-Reference) · [Python API](https://github.com/TCXM/openarm-runtime/wiki/Python-API) · [Mac / Windows 远程访问](https://github.com/TCXM/openarm-runtime/wiki/Remote-Access)
+
 ## Install only what you need
 
 Create a Python 3.12 virtual environment, then install from a release tag:
@@ -35,10 +37,10 @@ python3.12 -m venv .venv
 source .venv/bin/activate
 
 # Core: state types, software mapping and control API; no GUI or hardware SDK.
-pip install "openarm-runtime @ git+https://github.com/TCXM/openarm-runtime.git@v0.5.0"
+pip install "openarm-runtime @ git+https://github.com/TCXM/openarm-runtime.git@v0.6.0"
 
 # Serial leader readout, with a browser-based virtual robot.
-pip install "openarm-runtime[leader,viewer] @ git+https://github.com/TCXM/openarm-runtime.git@v0.5.0"
+pip install "openarm-runtime[leader,viewer] @ git+https://github.com/TCXM/openarm-runtime.git@v0.6.0"
 ```
 
 Extras compose freely:
@@ -46,6 +48,7 @@ Extras compose freely:
 - `viewer`: Viser + URDF/mesh loading.
 - `tactile`: pinned community Paxini SDK + PySerial; combine with `viewer` for visualization.
 - `video`: OpenCV headless + NumPy + Flask; independent of Viser, leaders and CAN.
+- `platform`: NiceGUI/FastAPI dashboard and aiohttp gateway.
 - `follower`: official OpenArm CAN SDK 1.4.1 and its build dependencies.
 
 The follower extra requires a Linux machine and the matching native C++ SDK.
@@ -61,7 +64,7 @@ project's environment. With uv, declare and lock the dependency directly:
 
 ```sh
 # Run in your own Python 3.12 project.
-uv add "openarm-runtime[leader,viewer] @ git+https://github.com/TCXM/openarm-runtime.git@v0.5.0"
+uv add "openarm-runtime[leader,viewer] @ git+https://github.com/TCXM/openarm-runtime.git@v0.6.0"
 ```
 
 **Modify the runtime while developing your application:** clone the source
@@ -94,6 +97,41 @@ extra still requires [native SDK setup](docs/workstation.md) in either mode.
 
 To develop the runtime on its own, use `uv sync --locked` in this repository;
 see [contributing](CONTRIBUTING.md).
+
+## Use all modules through one address
+
+The **OpenArm Platform** combines motor control, teleoperation, tactile and
+vision at **http://127.0.0.1:8888**. NiceGUI provides the dashboard; its
+FastAPI/Uvicorn server and aiohttp proxy carry module pages and real-time data
+through that address. Available from v0.6.0, it replaces separate module
+launches with one entry point. Install the optional platform dependencies,
+configure the machine once using [platform.example.json](platform.example.json),
+then launch:
+
+```sh
+python -m pip install "openarm-runtime[platform] @ git+https://github.com/TCXM/openarm-runtime.git@v0.6.0"
+openarm-runtime platform --profile ~/.config/openarm-runtime/platform.json
+```
+
+Install each configured module's extras as well (`leader,viewer,follower`,
+`tactile,viewer`, and/or `video`); the platform extra does not install hardware
+SDKs. In a configured development checkout, `python3 run_platform.py` selects
+the project's environment automatically. For another computer, only one SSH
+forward is needed, including camera images and all Viser connections:
+
+```sh
+ssh -N -L 8888:127.0.0.1:8888 USER@WORKSTATION
+```
+
+Control and teleoperation switch as mutually exclusive modes from the same
+sidebar; tactile and vision can stay connected alongside them. Startup never
+enables a motor or starts following. Stop the old independent controllers using
+their normal procedure before replacing their launches with the platform.
+Existing services can be reused but remain externally owned.
+
+See [platform setup](docs/platform.md) for configuration and migration. The
+individual commands below remain available for module diagnostics and API use;
+normal platform use does not require launching them separately.
 
 ## Read a leader in Python
 
@@ -226,7 +264,7 @@ ssh -N -L 8890:127.0.0.1:8890 -L 8891:127.0.0.1:8891 your-workstation
 Video is available starting with v0.3.0:
 
 ```sh
-python -m pip install "openarm-runtime[video] @ git+https://github.com/TCXM/openarm-runtime.git@v0.5.0"
+python -m pip install "openarm-runtime[video] @ git+https://github.com/TCXM/openarm-runtime.git@v0.6.0"
 # No cameras or vendor SDK required; clearly labelled SIMULATION.
 openarm-runtime video --simulate --port 5004
 ```
@@ -336,7 +374,7 @@ examples in `examples/`. [Changelog](CHANGELOG.md) · [Provenance](ORIGIN.md) ·
 Paxini IP-M2324-Core (68 points) with the single-channel USB serial converter:
 
 ```sh
-pip install "openarm-runtime[tactile,viewer] @ git+https://github.com/TCXM/openarm-runtime.git@v0.5.0"
+pip install "openarm-runtime[tactile,viewer] @ git+https://github.com/TCXM/openarm-runtime.git@v0.6.0"
 openarm-runtime tactile --device /dev/serial/by-id/YOUR_CONVERTER --device-id 2 --port 8891
 ```
 

@@ -14,6 +14,9 @@
   Reference distribution: https://github.com/orbbec/ros2_astra_camera . No vendor
   binary, SDK header, license grant or firmware is bundled. This package includes
   only its own C++ adapter source; users must obtain an SDK under its own terms.
+- Platform extra: NiceGUI3.18.0 (MIT) and aiohttp3.14.5 (Apache-2.0 AND MIT),
+  installed as dependencies. NiceGUI supplies its frontend assets and uses
+  FastAPI (MIT), Starlette and Uvicorn (BSD3-Clause); their sources are not vendored.
 - Viser1.1.1, yourdfpy and pycollada are optional visualization dependencies.
 - Official OpenArm description assets are downloaded into a caller-supplied cache
   and hash-verified; the asset preparation workflow retains upstream LICENSE.txt.
