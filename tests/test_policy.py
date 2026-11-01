@@ -200,6 +200,7 @@ class PolicyTests(unittest.TestCase):
         self.assertEqual(sample.data[1:], ((0, 0, 2),) * 68)
 
     def test_future_chunk_does_not_replace_current_until_start(self):
+        future_starts = []
         class Worker:
             def __init__(self, *args): self.request = None; self.count = 0
             def ready(self, timeout, cancelled=None): pass
@@ -208,6 +209,8 @@ class PolicyTests(unittest.TestCase):
                 self.count += 1
                 q = ((.05 if self.count == 1 else .1),) * 7 + (0,)
                 start = self.request.captured_at + (0 if self.count == 1 else .2)
+                if self.count > 1:
+                    future_starts.append(start)
                 return ActionChunk(self.request.sequence, start, .5, (q,), robot.spec.names)
             def close(self): pass
         robot = SimulatedRobot(("left",))
@@ -217,7 +220,9 @@ class PolicyTests(unittest.TestCase):
         qs = [v[0] for _, v in robot.commands]
         self.assertIn(.05, qs)
         self.assertIn(.1, qs)
-        self.assertGreaterEqual(next(i for i, q in enumerate(qs) if q == .1), 10)
+        self.assertTrue(future_starts)
+        first_new_command = next(t for t, values in robot.commands if values[0] == .1)
+        self.assertGreaterEqual(first_new_command, future_starts[0])
 
     def test_classic_all_arm_preflight_before_enable(self):
         robot = ClassicRobot(Profile("can1", "can0", True))
