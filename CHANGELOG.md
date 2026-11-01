@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased — local v0.7.0 integration
+
+- Merge v0.7.0 policy/gravity support with retained motor-control calibration,
+  absolute manual targets, queued reporting and read-only CAN recovery.
+- Add same-origin policy visualization, simulated sessions and bounded recording
+  replay to the platform, including attach-only mode.
+
+
 ## 0.7.0 — 2026-11-01
 
 - Add optional Pinocchio gravity feedforward shared by hold, panel, teleoperation

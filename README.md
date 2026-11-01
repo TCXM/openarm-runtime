@@ -8,6 +8,13 @@ Python 3.12 · MIT · Linux SocketCAN for followers · Independent community pro
 
 ## Policy execution and gravity compensation
 
+This integration branch adds **策略可视化** to the platform at `/#policy`
+(standalone same-origin page: `/policy`). It displays submitted targets and
+recorded feedback separately, inference latency and a joint timeline. Built-in
+simulated policies and episode replay work in `--attach-only` mode. This page
+uses the v0.7.0 policy contracts; it does not launch the Classic motor backend.
+See [platform policy visualization](docs/platform.md#policy-visualization).
+
 Optional [physical gravity compensation](docs/gravity.md) adds shared model-based
 feedforward to hold, teleoperation and policy control, with shadow diagnostics and
 per-machine configuration. Install the `gravity` extra; active physical validation

@@ -15,7 +15,8 @@ HAS_PLATFORM = importlib.util.find_spec('nicegui') is not None
 def running():
     return {name: dict(state='standby' if name == 'teleop' else 'running',
                       reachable=name != 'teleop', managed=name != 'teleop', generation=1)
-            for name in ('control', 'teleop', 'tactile', 'vision')}
+            for name in ('control', 'teleop', 'tactile', 'vision')} | {
+                'policy': dict(state='running', reachable=True, managed=False, generation=0)}
 
 
 @unittest.skipUnless(HAS_PLATFORM, 'NiceGUI platform extra required')
@@ -55,6 +56,17 @@ class DashboardTests(unittest.IsolatedAsyncioTestCase):
             d._render()
             self.assertIn('active', d.nav['control'].classes)
             self.assertNotIn('active', d.nav['vision'].classes)
+
+    async def test_policy_uses_same_origin_and_preserves_control_frame(self):
+        d = self.dashboard
+        with self.client:
+            await d.select('control')
+            controller = d.frames['control'].element
+            await d.select('policy')
+            self.assertIs(d.frames['control'].element, controller)
+            self.assertEqual(d.frames['policy'].element.props['src'], '/policy')
+            self.assertEqual(d.external.props['href'], '/policy')
+            self.assertFalse(d.confirm_dialog.value)
 
     async def test_cancel_and_failed_switch_preserve_current_controller(self):
         d = self.dashboard

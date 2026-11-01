@@ -1,7 +1,7 @@
 # OpenArm Platform
 
 `openarm-runtime platform` brings motor control, teleoperation, tactile and
-vision into one local workspace at **http://127.0.0.1:8888**. Use the sidebar to
+vision and policy visualization into one local workspace at **http://127.0.0.1:8888**. Use the sidebar to
 open each module; all pages, images and WebSocket connections pass through this
 one address. The dashboard uses NiceGUI components on FastAPI/Uvicorn, and
 aiohttp handles upstream HTTP, streaming responses and WebSocket connections.
@@ -172,3 +172,33 @@ Tactile's nested viewers use `/apps/tactile/_extra/0/` and
 are forwarded through these paths without requiring client access to the
 internal ports. `/api/status` reports page service availability; it does not
 report synchronized hardware data or certify that a motor is disabled.
+
+## Policy visualization
+
+This integration branch adds an internal **策略可视化** module at
+`http://127.0.0.1:8888/#policy`; `/policy` opens it without the dashboard shell.
+It uses the same NiceGUI server and needs no extra port or device service.
+Existing platform profiles continue to work. The page is also available in
+`--attach-only` mode and does not switch or stop a hardware module.
+
+- Start the built-in J1 sine or hold-pose simulation (1–60 seconds). The page
+  runs a v0.7.0 `PolicySession`, process-isolated inference and `SimulatedRobot`.
+  Simulation is an ideal position plant, not measured hardware performance.
+- Choose a joint to compare submitted targets with timestamped feedback
+  observations. The page also shows the latest inference latency and command
+  count. After the session, play or drag the timeline to inspect joint values.
+- Open a CLI recording from a child directory of `~/openarm-episodes`. Set the
+  optional top-level `policy_record_root` in the external platform JSON to use
+  another location. Relative paths resolve beside that JSON file. The loader
+  reads `events.jsonl` and only robot-state array sidecars, never image arrays
+  or policy plugins. Recordings with no ending event are marked incomplete.
+
+The view retains the latest 2,000 sampling events and limits recording files
+to 64 MiB. Curves are sampled to at most 701 points per series for rendering;
+the timeline table uses the retained samples. Recorded feedback is historical,
+not the current robot pose. Replay does not resubmit commands to hardware.
+
+One simulated session is shared by all browser views. Closing a tab leaves the
+bounded simulation running; Stop or server shutdown cancels it and closes the
+inference worker. Physical policy execution remains an explicit CLI/API operation
+as documented in [policy.md](policy.md).

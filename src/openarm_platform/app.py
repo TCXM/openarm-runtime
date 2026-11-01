@@ -18,8 +18,9 @@ class Coordinator:
     waits for those operations before the manager performs its final cleanup.
     """
 
-    def __init__(self, manager, *, attach_only=False):
+    def __init__(self, manager, *, attach_only=False, builtin_pages=()):
         self.manager = manager
+        self.builtin_pages = tuple(builtin_pages)
         self.attach_only = attach_only
         self.closing = False
         self._operations = set()
@@ -40,13 +41,17 @@ class Coordinator:
         if not self.attach_only:
             await self._call(self.manager.start)
 
+    def with_builtin(self, states):
+        return {**states, **{name: dict(reachable=True, state='running', managed=False, generation=0)
+                            for name in self.builtin_pages}}
+
     async def status(self):
-        return await self._call(self.manager.status)
+        return self.with_builtin(await self._call(self.manager.status))
 
     async def activate(self, name):
-        if self.attach_only:
+        if self.attach_only or name in self.builtin_pages:
             return await self.status()
-        return await self._call(self.manager.activate, name)
+        return self.with_builtin(await self._call(self.manager.activate, name))
 
     def begin_shutdown(self):
         self.closing = True
@@ -120,8 +125,11 @@ def create_app(config, manager=None, *, attach_only=False, with_ui=True):
 
     if manager is None:
         manager = ServiceManager(config.services, config.log_dir)
-    coordinator = Coordinator(manager, attach_only=attach_only)
+    coordinator = Coordinator(manager, attach_only=attach_only,
+                              builtin_pages=(p.id for p in config.pages if p.path))
     gateway = Gateway(config)
+    from .policy import PolicyPreview
+    preview = PolicyPreview(config.policy_record_root)
 
     @asynccontextmanager
     async def lifespan(app):
@@ -132,16 +140,20 @@ def create_app(config, manager=None, *, attach_only=False, with_ui=True):
         finally:
             coordinator.begin_shutdown()
             try:
-                await gateway.close()
-            finally:
                 try:
-                    await coordinator.close()
-                except BaseException as exc:
-                    app.state.shutdown_error = exc
-                    raise
+                    await asyncio.to_thread(preview.close)
+                finally:
+                    try:
+                        await gateway.close()
+                    finally:
+                        await coordinator.close()
+            except BaseException as exc:
+                app.state.shutdown_error = exc
+                raise
 
     app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
     app.state.gateway = gateway
+    app.state.policy_preview = preview
     app.state.coordinator = coordinator
     app.state.shutdown_error = None
     app.add_middleware(LocalBoundary)
@@ -180,6 +192,12 @@ def create_app(config, manager=None, *, attach_only=False, with_ui=True):
 
     gateway.install(app)
     if with_ui:
+        from .policy_view import build_policy_view
+
+        @ui.page('/policy', title='策略可视化 · OpenArm')
+        async def policy_page():
+            build_policy_view(preview)
+
         async def dashboard():
             await build_dashboard(config, coordinator, attach_only=attach_only)
         ui.run_with(app, root=dashboard, title=config.title, language='zh-CN',

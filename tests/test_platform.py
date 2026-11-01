@@ -81,6 +81,18 @@ class PlatformApiTests(unittest.TestCase):
         return TestClient(create_app(load_config(), manager, attach_only=attach_only, with_ui=False),
                           base_url='http://127.0.0.1:8888')
 
+    def test_policy_page_is_available_in_attach_only_without_activating_hardware(self):
+        manager = Mock()
+        manager.status.return_value = {}
+        with self.client(manager, attach_only=True) as client:
+            response = client.post('/api/select', json={'id': 'policy'},
+                                   headers={'Origin': 'http://127.0.0.1:8888'})
+            self.assertEqual(response.status_code, 200)
+            self.assertTrue(response.json()['services']['policy']['reachable'])
+            manager.start.assert_not_called()
+            manager.activate.assert_not_called()
+            self.assertIsNone(client.app.state.policy_preview.worker)
+
     def test_http_status_selection_and_origin_boundary(self):
         manager = Mock()
         manager.status.return_value = {'control': {'state': 'external', 'reachable': True}}
@@ -89,10 +101,10 @@ class PlatformApiTests(unittest.TestCase):
             manager.start.assert_called_once()
             response = client.get('/api/config')
             self.assertEqual(response.status_code, 200)
-            self.assertEqual(len(response.json()['pages']), 4)
+            self.assertEqual(len(response.json()['pages']), 5)
             self.assertNotIn('command', response.text)
             self.assertNotIn('cwd', response.text)
-            self.assertEqual(client.get('/api/status').json()['services'], manager.status.return_value)
+            self.assertEqual(client.get('/api/status').json()['services'], client.app.state.coordinator.with_builtin(manager.status.return_value))
             self.assertEqual(client.get('/api/status').headers['x-frame-options'], 'SAMEORIGIN')
             self.assertEqual(client.get('/api/status', headers={'Host': 'evil.invalid'}).status_code, 403)
             self.assertEqual(client.get('/_nicegui_ws/socket.io/?EIO=4&transport=polling',
