@@ -39,7 +39,8 @@ class PlatformTests(unittest.TestCase):
 
     def test_collection_root_follows_teleop_profile_or_explicit_override(self):
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            # macOS temporary directories can be reached through /var symlinks.
+            root = Path(directory).resolve()
             (root/'collection.json').write_text(json.dumps({'root': 'episodes'}))
             data = {'services': {'teleop': {'command': ['python', 'leader', '--collection-profile', 'collection.json']}}}
             config = self.profile(directory, data)
