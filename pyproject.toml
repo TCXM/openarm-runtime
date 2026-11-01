@@ -20,6 +20,7 @@ Issues = "https://github.com/TCXM/openarm-runtime/issues"
 Changelog = "https://github.com/TCXM/openarm-runtime/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
+gravity = ["pin==4.1.0"]
 leader = ["feetech-servo-sdk==1.0.0", "pyserial==3.5"]
 viewer = ["viser[urdf]==1.1.1", "pycollada==0.9.3"]
 tactile = [

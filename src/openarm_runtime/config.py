@@ -22,6 +22,7 @@ class Profile:
     mapping_verified: bool = False
     rate_hz: float = 20.0
     feedback_timeout_s: float = 0.04
+    gravity: dict | None = None
 
     def __post_init__(self):
         if self.left == self.right:
@@ -33,6 +34,10 @@ class Profile:
             raise ValueError("mapping_verified must be a JSON boolean")
         finite(self.rate_hz, 10, 50, "rate_hz")
         finite(self.feedback_timeout_s, 0.005, 0.1, "feedback_timeout_s")
+        if self.gravity is not None and (not isinstance(self.gravity, dict)
+                or set(self.gravity) - {"left", "right"}
+                or any(not isinstance(p, str) or not p for p in self.gravity.values())):
+            raise ValueError("gravity maps left/right to gravity profile paths")
 
     @classmethod
     def load(cls, path):
@@ -42,7 +47,17 @@ class Profile:
         # Old commissioning profiles carried a manual flag. The panel checks each
         # motor itself; retaining an old machine file must not bypass that check.
         data.pop("mit_mode_verified", None)
+        if isinstance(data.get("gravity"), dict):
+            data["gravity"] = {side: str((Path(path).expanduser().resolve().parent / value).resolve())
+                               for side, value in data["gravity"].items()}
         return cls(**data)
+
+    def make_gravity(self, side):
+        self.interface(side)
+        if not self.gravity or side not in self.gravity:
+            return None
+        from .gravity import load_gravity
+        return load_gravity(self.gravity[side])
 
     def interface(self, side: str):
         if side not in ("left", "right"):

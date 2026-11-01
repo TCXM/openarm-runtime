@@ -131,14 +131,22 @@ class ClassicBus:
         require_classic_link(inspect_link(self.interface))
         return report
 
-    def exchange(self, targets, kp, kd):
+    def exchange(self, targets, kp, kd, feedforward=None):
         """Batch MIT controls followed by their eight state replies, as in follower."""
         if set(targets) != set(IDS):
             raise ValueError("Whole-arm exchange requires IDs 1..8")
+        if feedforward is not None:
+            if set(feedforward) != set(IDS) or any(
+                    not math.isfinite(v) or abs(v) > self.ranges[mid].torque
+                    for mid, v in feedforward.items()):
+                raise ValueError("Invalid motor-space feedforward")
         time.sleep(max(0, 0.02 - (time.monotonic() - getattr(self, "last_send", 0))))
         self.drain()
         for mid in IDS:
-            self.command(mid, "position", targets[mid], kp[mid - 1], kd[mid - 1])
+            if feedforward is None:
+                self.command(mid, "position", targets[mid], kp[mid - 1], kd[mid - 1])
+            else:
+                self.command(mid, "position", targets[mid], kp[mid - 1], kd[mid - 1], feedforward[mid])
         states = {}
         def collect(cid, data):
             mid = cid - 16
@@ -169,8 +177,8 @@ class ClassicBus:
                 (expected.pMax, expected.vMax))):
                 raise RuntimeError(f"ID{mid} firmware ranges differ from SDK; refusing incorrectly scaled commands")
             self.motors[mid] = oa.Motor(kind, mid, mid + 16)
-            # Only zero feedforward is supported. Its 12-bit midpoint is independent
-            # of TMAX; feedback and effort guards still use the firmware range.
+            # Verify the legacy zero midpoint. Nonzero feedforward is rescaled to
+            # the firmware TMAX and decoded/checked in command().
             packet = oa.CanPacketEncoder.create_mit_control_command(
                 self.motors[mid], oa.MITParam(0, 0, 0, 0, 0))
             self._require_zero_feedforward(packet.data)
@@ -181,14 +189,30 @@ class ClassicBus:
         if len(data) != 8 or ((data[6] & 15) << 8 | data[7]) != 2047:
             raise RuntimeError("Expected SDK zero-feedforward midpoint; refusing command")
 
-    def command(self, mid, action, position=0.0, kp=0.0, kd=0.0):
+    def command(self, mid, action, position=0.0, kp=0.0, kd=0.0, feedforward=0.0):
         encoder = self.sdk.CanPacketEncoder
         motor = self.motors[mid]
         if action == "position":
             if not math.isfinite(position) or abs(position) >= self.ranges[mid].position:
                 raise ValueError("Target outside firmware position range")
-            packet = encoder.create_mit_control_command(motor, self.sdk.MITParam(kp, kd, position, 0.0, 0.0))
-            self._require_zero_feedforward(packet.data)
+            actual = self.ranges[mid].torque
+            if not math.isfinite(feedforward) or abs(feedforward) > actual:
+                raise ValueError("Feedforward outside firmware torque range")
+            # The official encoder uses model-default TMAX. Scale its input so
+            # decoding the same bits with the actual firmware TMAX yields Nm.
+            encoded_torque = 0.0
+            if feedforward != 0:
+                kind = getattr(self.sdk.MotorType, MODELS[mid - 1])
+                sdk_max = self.sdk.Motor.get_limit_param(kind).tMax
+                encoded_torque = feedforward * sdk_max / actual
+            packet = encoder.create_mit_control_command(motor, self.sdk.MITParam(kp, kd, position, 0.0, encoded_torque))
+            if feedforward == 0:
+                self._require_zero_feedforward(packet.data)
+            else:
+                bits = ((packet.data[6] & 15) << 8) | packet.data[7]
+                decoded = bits / 4095 * 2 * actual - actual
+                if abs(decoded - feedforward) > 2 * actual / 4095 + 1e-9:
+                    raise RuntimeError("SDK feedforward encoding disagrees with firmware range")
         elif action in ("enable", "disable"):
             packet = getattr(encoder, f"create_{action}_command")(motor)
         else:

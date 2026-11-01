@@ -46,7 +46,35 @@ def main():
     tactile.add_argument("--port", type=int, default=8891)
     tactile.add_argument("--baudrate", type=int, default=921600)
     tactile.add_argument("--device-id", type=int, default=1, help="Sensor module number + 1 (1..255)")
+    policy = commands.add_parser("policy", help="Run a model-independent policy episode (classic enables motors)")
+    policy.add_argument("--robot", choices=("simulate", "classic"), required=True)
+    policy.add_argument("--policy", default="openarm_policy.adapters:HoldPolicy", help="Importable module:factory")
+    policy.add_argument("--profile", type=Path, help="External sensor/session/policy JSON")
+    policy.add_argument("--sides", nargs="+", choices=("left", "right"), default=["left", "right"])
+    policy.add_argument("--duration", type=float, default=10)
+    policy.add_argument("--record", type=Path, help="New episode directory outside Git")
+    gravity = commands.add_parser("gravity", help="Offline gravity prediction; never opens hardware")
+    gravity.add_argument("--profile", type=Path, required=True)
+    gravity_input = gravity.add_mutually_exclusive_group(required=True)
+    gravity_input.add_argument("--positions", type=float, nargs=8, metavar="RAD")
+    gravity_input.add_argument("--episode", type=Path, help="Recorded policy episode for offline diagnosis")
+    gravity.add_argument("--side", choices=("left", "right"), help="Required with --episode")
     args = parser.parse_args()
+    if args.command == "gravity":
+        from .gravity import load_gravity, diagnose_episode
+        if args.episode and args.side is None:
+            parser.error("gravity --episode requires --side")
+        compensation = load_gravity(args.profile)
+        result = (diagnose_episode(compensation, args.episode, args.side) if args.episode else
+                  {"model": compensation.metadata(), "gravity_nm": compensation.model.torques(args.positions)})
+        print(json.dumps(result, indent=2))
+        return
+    if args.command == "policy":
+        if args.robot == "classic" and (args.config is None or args.record is None):
+            parser.error("policy --robot classic requires --config and --record")
+        from openarm_policy.cli import run
+        run(args)
+        return
     if args.command == "tactile":
         if not 1024 <= args.port <= 65535 or args.baudrate <= 0:
             parser.error("Port must be 1024..65535 and baudrate must be positive")

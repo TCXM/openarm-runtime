@@ -13,9 +13,10 @@ FOLLOWER_KD = (1.5, 1.5, 3.0, 5.0, 0.3, 0.3, 0.3, 0.3)
 
 
 class ArmHold:
-    def __init__(self, bus, cancelled, record, publish, *, tracking=False):
+    def __init__(self, bus, cancelled, record, publish, *, tracking=False, gravity=None):
         self.bus, self.cancelled, self.record, self.publish = bus, cancelled, record, publish
         self.tracking = tracking
+        self.gravity = gravity
         self.attempted = []
         self.states = {}
         self.base = {}
@@ -42,11 +43,16 @@ class ArmHold:
         try:
             self.check_cancelled()
             self.bus.prepare_encoder(IDS)
+            initial = {}
             for mid in IDS:
                 self.check_cancelled()
                 state = self.bus.state(mid)
                 self.validate(state, enabled=False)
+                initial[mid] = state
                 self.bus.command(mid, "position", state.position, 0, 0)
+            if self.gravity is not None:
+                self.gravity.preflight(initial, self.bus.ranges)
+                self.record({"event": "gravity_config", **self.gravity.metadata()})
             for mid in IDS:
                 self.check_cancelled()
                 self.attempted.append(mid)
@@ -151,7 +157,16 @@ class ArmHold:
         self._exchange(dict(targets), FOLLOWER_KP, FOLLOWER_KD)
 
     def _exchange(self, targets, kp, kd):
-        states = self.bus.exchange(targets, kp, kd)
+        if self.gravity is None:
+            states = self.bus.exchange(targets, kp, kd)
+        else:
+            feedforward = self.gravity.update(self.states)
+            for mid in IDS:
+                state = self.states[mid]
+                effort = kp[mid-1] * (targets[mid] - state.position) - kd[mid-1] * state.velocity + feedforward[mid]
+                if abs(effort) > .9 * self.bus.ranges[mid].torque:
+                    raise RuntimeError(f"ID{mid}: combined PD/gravity effort near firmware range")
+            states = self.bus.exchange(targets, kp, kd, feedforward)
         if set(states) != set(IDS):
             raise RuntimeError("Incomplete arm feedback")
         for mid, state in states.items():
@@ -161,6 +176,10 @@ class ArmHold:
         self.states, self.targets = states, targets
         self.publish(states)
         self.cycles += 1
+        if self.gravity is not None:
+            self.record({"event": "gravity_sample", "time": time.monotonic(),
+                         "targets_rad": dict(targets), "gravity": self.gravity.last,
+                         "states": {mid: asdict(s) for mid, s in states.items()}})
         if self.cycles % 20 == 0:
             self.record({"event": "hold_sample", "targets_rad": targets,
                          "states": {mid: asdict(s) for mid, s in states.items()}})
