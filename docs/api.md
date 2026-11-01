@@ -86,9 +86,14 @@ your hardware has been separately verified for this behavior.
 ## Automatic follower calibration (v0.2.0)
 
 `calibrate_arm(profile, side, *, cancelled, record, publish, progress,
-allow_unreadable_mode=False)` synchronously performs a complete single-arm v2
+allow_unreadable_mode=False, write_zero=True)` synchronously performs a complete single-arm v2
 calibration and writes hardware zeros. `side` is `left` or `right`. It owns the
 bus lease, preflight, enable, motion and disable; stop any reader first.
+
+The retained local `write_zero=False` option runs the same physical trajectory,
+then verifies the disabled end pose without writing any encoder zeros. It still
+requires the calibration reference starting pose; the end pose may have nonzero
+readings in the preserved encoder coordinates. CLI: `calibrate --no-write-zero`.
 
 It returns `{motor_id: raw_zero_radians}` for IDs1–8 (the pre-write encoder frame).
 `cancelled()` defaults to false; `record(event)`, `publish(states)` and

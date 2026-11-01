@@ -27,6 +27,8 @@ def main():
     calibration.add_argument("--side", choices=("left", "right"), required=True)
     calibration.add_argument("--report-root", type=Path, required=True)
     calibration.add_argument("--allow-unreadable-mode", action="store_true")
+    calibration.add_argument("--no-write-zero", action="store_true",
+                             help="Run the physical calibration trajectory without rewriting encoder zeros")
     for name, help_text in (("view", "Read-only live viewer"),
                             ("panel", "User-operated whole-arm control; startup is read-only")):
         command = commands.add_parser(name, help=help_text)
@@ -163,11 +165,12 @@ def main():
                 datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")+"-"+uuid.uuid4().hex+".json"),
                 {"source": "cli_user", "action": "auto_calibrate", "side": args.side,
                  "interface": profile.interface(args.side),
-                 "allow_unreadable_mode": args.allow_unreadable_mode})
-            print("Automatic v2 calibration: motion and zero writes. Ctrl+C stops. Report:", report.path, flush=True)
+                 "allow_unreadable_mode": args.allow_unreadable_mode, "write_zero": not args.no_write_zero})
+            print("Automatic v2 calibration: " + ("motion only; NO zero writes" if args.no_write_zero else "motion and zero writes")
+                  + ". Ctrl+C stops. Report:", report.path, flush=True)
             calibrate_arm(profile, args.side, cancelled=cancel.is_set, record=report.record,
                           progress=lambda message: print(message, flush=True),
-                          allow_unreadable_mode=args.allow_unreadable_mode)
+                          allow_unreadable_mode=args.allow_unreadable_mode, write_zero=not args.no_write_zero)
         except BaseException as exc:
             if report:
                 report.record({"event": "ended", "error": f"{type(exc).__name__}: {exc}"})

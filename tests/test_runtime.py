@@ -131,13 +131,16 @@ class RuntimeTests(unittest.TestCase):
                     SimpleNamespace(client=SimpleNamespace(client_id=42)))
                 self.assertEqual(session.start.call_args.args[:2], (42, side))
                 self.assertIs(session.start.call_args.args[3], True)
-                self.assertEqual(session.start.call_args.kwargs, {"calibration": True})
+                self.assertEqual(session.start.call_args.kwargs, {"calibration": True, "write_zero": True})
+            handles["操作"].value = "自动标定（不写零位）"
+            handles["开始标定"].callback(SimpleNamespace(client=SimpleNamespace(client_id=42)))
+            self.assertEqual(session.start.call_args.kwargs, {"calibration": True, "write_zero": False})
             session.start.reset_mock()
             for side, label in (("right", "右臂"), ("left", "左臂")):
                 handles["机械臂"].value = label
                 for mid in range(1, 9):
                     name = f"J{mid}" if mid < 8 else "夹爪"
-                    slider = handles[f"{name} 偏移 (°)"]
+                    slider = handles[f"{name} 角度 (°)" if mid < 8 else f"{name} 偏移 (°)"]
                     slider.value = 1.2
                     slider.callback(SimpleNamespace(client=SimpleNamespace(client_id=42)))
                     self.assertEqual(session.set_target.call_args.args, (42, side, mid, 1.2))

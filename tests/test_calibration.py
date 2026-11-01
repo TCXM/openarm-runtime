@@ -113,6 +113,38 @@ class CalibrationTests(unittest.TestCase):
                 self.assertFalse(bus.enabled)
                 self.assertLess(self.clock.now, 1000)
 
+    def test_motion_only_both_sides_preserve_encoder_coordinates_and_disable(self):
+        for side in ('left', 'right'):
+            with self.subTest(side=side):
+                bus = MechanicalBus(side, self.clock)
+                bus.set_zero = Mock(side_effect=AssertionError('Must never write zero'))
+                with patch('openarm_runtime.calibration.bus_lease', return_value=nullcontext()), \
+                     patch('openarm_runtime.calibration.ClassicBus', return_value=bus), \
+                     patch('openarm_runtime.calibration.write_zeros') as write:
+                    zeros = calibrate_arm(Profile('can1', 'can0', True), side,
+                                          record=self.events.append, write_zero=False)
+                write.assert_not_called()
+                bus.set_zero.assert_not_called()
+                self.assertFalse(bus.enabled)
+                self.assertTrue(bus.closed)
+                for mid in IDS:
+                    self.assertAlmostEqual(zeros[mid], bus.zeros[mid])
+                    self.assertAlmostEqual(bus.positions[mid], bus.zeros[mid])
+                self.assertTrue(self.events[-1]['zero_write_skipped'])
+                self.assertEqual(self.events[-1]['zeroed_ids'], [])
+
+    def test_motion_only_cancel_still_disables_and_never_writes(self):
+        bus = MechanicalBus('left', self.clock)
+        bus.set_zero = Mock(side_effect=AssertionError('Must never write zero'))
+        with patch('openarm_runtime.calibration.bus_lease', return_value=nullcontext()), \
+             patch('openarm_runtime.calibration.ClassicBus', return_value=bus):
+            with self.assertRaises(InterruptedError):
+                calibrate_arm(Profile('can1', 'can0', True), 'left', write_zero=False,
+                              cancelled=lambda: self.clock.now > 103, record=self.events.append)
+        self.assertFalse(bus.enabled)
+        self.assertTrue(bus.closed)
+        bus.set_zero.assert_not_called()
+
     def test_unsuccessful_seek_is_bounded_and_disables(self):
         bus = MechanicalBus("right", self.clock)
         bus.stops[8] = (1, 10)

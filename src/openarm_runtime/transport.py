@@ -126,7 +126,10 @@ class ClassicBus:
             self.ranges[mid] = MotorRange(*(self.parameter(mid, rid) for rid in (21, 22, 23)))
             state = self.state(mid)
             if state.status != 0:
-                raise RuntimeError(f"ID{mid} must be disabled; status={state.status}")
+                raise RuntimeError(
+                    f"ID{mid} must be disabled; status={state.status}"
+                    + (" (OVERLOAD/过载；不是零点问题，请排查负载和碰撞，勿重复使能或标定)"
+                       if state.status == 14 else ""))
             report[mid] = {"baud_code": code, "range": asdict(self.ranges[mid]), "state": asdict(state)}
         require_classic_link(inspect_link(self.interface))
         return report
@@ -150,8 +153,10 @@ class ClassicBus:
             return states if len(states) == len(IDS) else None
         try:
             return self.receive(collect)
-        except TimeoutError:
-            raise TimeoutError(f"Missing control feedback IDs {sorted(set(IDS) - set(states))}") from None
+        except TimeoutError as exc:
+            failure = TimeoutError(f"Missing control feedback IDs {sorted(set(IDS) - set(states))}")
+            failure.feedback = dict(states)
+            raise failure from exc
 
     def prepare_encoder(self, ids):
         import openarm_can as oa

@@ -422,12 +422,15 @@ def write_zeros(bus, zeros, cancelled, record, publish):
 
 
 def calibrate_arm(profile, side, *, cancelled=_running, record=_ignore,
-                  publish=_ignore, progress=_ignore, allow_unreadable_mode=False):
+                  publish=_ignore, progress=_ignore, allow_unreadable_mode=False,
+                  write_zero=True):
     """Enable, seek stops, reach computed zero, disable, write/verify zeros.
 
     This call moves real hardware. The caller must stop its reader first and
     ensure the v2 stock arm starts approximately at the official reference pose.
-    No communication baud, mode or persistence/flash parameters are written.
+    With write_zero=False the same physical stop-seeking trajectory runs, but
+    encoder zeros are preserved. The computed pose need not read as zero in the
+    existing coordinates. No communication baud, mode or flash parameters change.
     """
     if not profile.mapping_verified:
         raise ValueError("Confirm physical left/right mapping before calibration")
@@ -458,8 +461,28 @@ def calibrate_arm(profile, side, *, cancelled=_running, record=_ignore,
                     except Exception:
                         pass  # Preserve the motion/disable error if report storage fails.
                 raise
-            progress("已失能，检查姿态并写入零位…")
-            write_zeros(bus, zeros, cancelled, record, publish)
+            if write_zero:
+                progress("已失能，检查姿态并写入零位…")
+                write_zeros(bus, zeros, cancelled, record, publish)
+            else:
+                progress("已失能，验证结束姿态；保留原有电机零位…")
+                states = {}
+                for mid in IDS:
+                    if cancelled():
+                        raise InterruptedError("Calibration motion stopped; zero writes disabled")
+                    state = bus.state(mid)
+                    if (state.motor_id != mid or state.status != 0 or state.frame_format != "classic"
+                            or not state.fresh(time.monotonic())
+                            or not math.isfinite(state.position) or not math.isfinite(state.velocity)
+                            or abs(state.velocity) > 0.08
+                            or abs(state.position-zeros[mid]) > math.radians(0.5)):
+                        raise RuntimeError(f"ID{mid}: disabled end pose moved or feedback invalid; no zero writes")
+                    states[mid] = state
+                publish(states)
+                record({"event": "calibration_motion_complete", "zero_write_skipped": True,
+                        "zeroed_ids": [], "computed_zero_rad": zeros,
+                        "positions_rad": {mid: state.position for mid, state in states.items()}})
+                progress("标定轨迹完成 · 未写入零位，机械臂已失能")
             return zeros
         finally:
             bus.close()

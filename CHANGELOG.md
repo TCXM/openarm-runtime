@@ -1,15 +1,5 @@
 # Changelog
 
-## Unreleased
-
-- Recover read-only Classic CAN telemetry after historical warning counters or
-  disconnections using bounded sessions and interruptible capped retry backoff.
-  Revalidate all eight motors and firmware ranges on reconnect; require complete
-  feedback before clearing errors. Preserve strict motion preflight and never
-  reset interfaces, switch Classic to FD, or send motor-control commands during
-  recovery.
-
-
 ## 0.6.0 — 2026-10-31
 
 - Add the local OpenArm Platform workspace with unchanged control, teleoperation,

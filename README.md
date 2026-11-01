@@ -6,8 +6,6 @@ the CLI for live inspection and user-operated control.
 
 Python 3.12 · MIT · Linux SocketCAN for followers · Independent community project
 
-**[中文使用文档 / Wiki](https://github.com/TCXM/openarm-runtime/wiki/Home)** · [常用命令](https://github.com/TCXM/openarm-runtime/wiki/CLI-Reference) · [Python API](https://github.com/TCXM/openarm-runtime/wiki/Python-API) · [Mac / Windows 远程访问](https://github.com/TCXM/openarm-runtime/wiki/Remote-Access)
-
 ## Install only what you need
 
 Create a Python 3.12 virtual environment, then install from a release tag:
@@ -320,12 +318,20 @@ readback test on the development rig; quantified accuracy and repeatability are
 not yet established. Read the [operator guide](docs/calibration.md) for the
 required starting pose, motion sequence, stop behavior and partial-write recovery.
 
+The local motor-control panel also retains **自动标定（不写零位）**, available
+as `calibrate --no-write-zero` or `calibrate_arm(..., write_zero=False)`. It runs
+the same stop-seeking motion and disables at completion, preserving encoder zeros.
+The final pose need not read as zero in the existing encoder coordinates.
+
 ## Scope
 
 The working baseline covers eight motors per follower arm, Classic CAN,
 whole-arm hold/relative targets, two STS3215 leader buses and virtual pose mapping.
-Manual control uses validated fixed gains, ±30° relative offsets and
-0.1–5°/s target speed. See [validation](docs/validation.md) for measured evidence.
+The local manual-control panel retains calibrated absolute J1–J7 angle sliders
+and a ±30° relative gripper offset, with 0.1–5°/s target speed and 10°/s²
+acceleration smoothing. Its fixed gains, feedback checks, queued reports and
+read-only CAN reconnect are retained. The default `hold_arm()` API keeps its
+±30° relative offsets. See [validation](docs/validation.md) for measured evidence.
 
 Long-duration dual-arm acceptance, collision avoidance, quantified
 calibration accuracy and long-term reliability are future work. Firmware encoding
