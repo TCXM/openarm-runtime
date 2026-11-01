@@ -302,17 +302,20 @@ def poll(
     max_cycles: int | None = None,
 ):
     from contextlib import ExitStack
-    from openarm_runtime.config import bus_lease, require_classic_link
+    from openarm_runtime.config import bus_lease, require_classic_read_link
 
     reader = None
     ownership = ExitStack()
     try:
         ownership.enter_context(bus_lease(interface, exclusive=False))
-        reader = ReadOnlyCAN(interface)
         host = inspect_link(interface)
         if frame_format == "classic":
-            require_classic_link(host)
+            require_classic_read_link(host)
+        reader = ReadOnlyCAN(interface)
         with shared.lock:
+            shared.baud_codes.clear()
+            shared.ranges.clear()
+            shared.frame_format = "preflight"
             shared.link = host
             shared.requested_format = frame_format
             shared.message = "只读检查每个电机的 can_br…"
@@ -355,10 +358,14 @@ def poll(
                         else:
                             shared.rx_classic += 1
                         received += 1
-            silent_cycles = silent_cycles + 1 if received == 0 else 0
+            silent_cycles = silent_cycles + 1 if received < len(IDS) else 0
             if silent_cycles >= 3:
-                raise RuntimeError("No motor replies for three cycles; polling stopped")
+                raise RuntimeError("Incomplete motor replies for three cycles; polling stopped")
             with shared.lock:
+                if received == len(IDS):
+                    shared.error = ""
+                else:
+                    shared.error = "Incomplete motor feedback; waiting for all eight motors"
                 mode = (
                     "兼容模式：Classic请求 / 混合回复，非全FD验收"
                     if frame_format == "compat"
@@ -380,6 +387,27 @@ def poll(
             ownership.close()
 
 
+def poll_reconnecting(interface, shared, stop, *, frame_format="auto"):
+    """Retry read-only sessions with interruptible, capped exponential backoff.
+
+    Each poll closes its socket and releases ownership before the retry wait.
+    Old samples retain their timestamps; an error clears only on a complete cycle.
+    """
+    delay = 1.0
+    while not stop.is_set():
+        before = shared.responses
+        poll(interface, shared, stop, frame_format=frame_format)
+        if stop.is_set():
+            return
+        if shared.responses > before:
+            delay = 1.0
+        with shared.lock:
+            shared.message = f"只读连接中断；{delay:g} 秒后重试（不重置总线）"
+        if stop.wait(delay):
+            return
+        delay = min(delay * 2, 30.0)
+
+
 class ArmConnection:
     """One independent read worker per bus; restarting one never touches the other."""
 
@@ -397,7 +425,7 @@ class ArmConnection:
             self.shared = Telemetry()
             self.stop = threading.Event()
             self.worker = threading.Thread(
-                target=poll,
+                target=poll_reconnecting,
                 args=(self.interface, self.shared, self.stop),
                 kwargs={"frame_format": self.frame_format},
                 daemon=True,
