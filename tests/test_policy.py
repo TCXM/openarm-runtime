@@ -33,7 +33,9 @@ class SlowPolicy(HoldPolicy):
 class SinglePolicy(HoldPolicy):
     def infer(self, observation):
         chunk = super().infer(observation)
-        return replace(chunk, steps=chunk.steps[:1], period_s=0.2)
+        # Match HoldPolicy's one-second horizon when comparing action shapes.
+        # Expiry itself is covered with explicit timestamps in the contract tests.
+        return replace(chunk, steps=chunk.steps[:1], period_s=1.0)
 
 
 class SlowResetPolicy(HoldPolicy):
