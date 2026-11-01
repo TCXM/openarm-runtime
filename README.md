@@ -6,6 +6,28 @@ the CLI for live inspection and user-operated control.
 
 Python 3.12 · MIT · Linux SocketCAN for followers · Independent community project
 
+## Policy execution and gravity compensation
+
+Optional [physical gravity compensation](docs/gravity.md) adds shared model-based
+feedforward to hold, teleoperation and policy control, with shadow diagnostics and
+per-machine configuration. Install the `gravity` extra; active physical validation
+is separate from the offline tests.
+
+`openarm_policy` connects model adapters to timestamped robot/video/tactile
+observations and single-step or chunked joint actions. Inference runs in a separate
+process; Classic CAN control retains independent workers, deadlines and disable
+cleanup. Models and preprocessing stay in your research package.
+
+```sh
+openarm-runtime policy --robot simulate --duration 3
+```
+
+See [policy contracts, adapters, recording and physical execution](docs/policy.md).
+Offline tests and an operator-authorized right-arm policy/gravity trial passed.
+See [measured results and remaining validation boundaries](docs/gravity.md#physical-right-arm-trials).
+
+**[中文使用文档 / Wiki](https://github.com/TCXM/openarm-runtime/wiki/Home)** · [常用命令](https://github.com/TCXM/openarm-runtime/wiki/CLI-Reference) · [Python API](https://github.com/TCXM/openarm-runtime/wiki/Python-API) · [Mac / Windows 远程访问](https://github.com/TCXM/openarm-runtime/wiki/Remote-Access)
+
 ## Install only what you need
 
 Create a Python 3.12 virtual environment, then install from a release tag:
@@ -15,10 +37,10 @@ python3.12 -m venv .venv
 source .venv/bin/activate
 
 # Core: state types, software mapping and control API; no GUI or hardware SDK.
-pip install "openarm-runtime @ git+https://github.com/TCXM/openarm-runtime.git@v0.6.0"
+pip install "openarm-runtime @ git+https://github.com/TCXM/openarm-runtime.git@v0.7.0"
 
 # Serial leader readout, with a browser-based virtual robot.
-pip install "openarm-runtime[leader,viewer] @ git+https://github.com/TCXM/openarm-runtime.git@v0.6.0"
+pip install "openarm-runtime[leader,viewer] @ git+https://github.com/TCXM/openarm-runtime.git@v0.7.0"
 ```
 
 Extras compose freely:
@@ -42,7 +64,7 @@ project's environment. With uv, declare and lock the dependency directly:
 
 ```sh
 # Run in your own Python 3.12 project.
-uv add "openarm-runtime[leader,viewer] @ git+https://github.com/TCXM/openarm-runtime.git@v0.6.0"
+uv add "openarm-runtime[leader,viewer] @ git+https://github.com/TCXM/openarm-runtime.git@v0.7.0"
 ```
 
 **Modify the runtime while developing your application:** clone the source
@@ -87,7 +109,7 @@ configure the machine once using [platform.example.json](platform.example.json),
 then launch:
 
 ```sh
-python -m pip install "openarm-runtime[platform] @ git+https://github.com/TCXM/openarm-runtime.git@v0.6.0"
+python -m pip install "openarm-runtime[platform] @ git+https://github.com/TCXM/openarm-runtime.git@v0.7.0"
 openarm-runtime platform --profile ~/.config/openarm-runtime/platform.json
 ```
 
@@ -242,7 +264,7 @@ ssh -N -L 8890:127.0.0.1:8890 -L 8891:127.0.0.1:8891 your-workstation
 Video is available starting with v0.3.0:
 
 ```sh
-python -m pip install "openarm-runtime[video] @ git+https://github.com/TCXM/openarm-runtime.git@v0.6.0"
+python -m pip install "openarm-runtime[video] @ git+https://github.com/TCXM/openarm-runtime.git@v0.7.0"
 # No cameras or vendor SDK required; clearly labelled SIMULATION.
 openarm-runtime video --simulate --port 5004
 ```
@@ -360,7 +382,7 @@ examples in `examples/`. [Changelog](CHANGELOG.md) · [Provenance](ORIGIN.md) ·
 Paxini IP-M2324-Core (68 points) with the single-channel USB serial converter:
 
 ```sh
-pip install "openarm-runtime[tactile,viewer] @ git+https://github.com/TCXM/openarm-runtime.git@v0.6.0"
+pip install "openarm-runtime[tactile,viewer] @ git+https://github.com/TCXM/openarm-runtime.git@v0.7.0"
 openarm-runtime tactile --device /dev/serial/by-id/YOUR_CONVERTER --device-id 2 --port 8891
 ```
 

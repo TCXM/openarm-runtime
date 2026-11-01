@@ -15,14 +15,8 @@ from .config import bus_lease
 from .control import check_modes
 from .report import Report
 from .transport import ClassicBus
-
-# LeRobot OpenArm follower side-specific bounds (degrees), configuration commit
-# 408e0ca763658f9294ef816d2b07f7d281ddeeb0. Our stock left gripper's motor zero
-# convention opens positive, whereas the normalized upstream gripper is negative.
-JOINT_LIMITS = {
-    "left": ((-75, 75), (-90, 9), (-85, 85), (0, 135), (-85, 85), (-40, 40), (-80, 80), (0, 65)),
-    "right": ((-75, 75), (-9, 90), (-85, 85), (0, 135), (-85, 85), (-40, 40), (-80, 80), (-65, 0)),
-}
+from .joints import JOINT_LIMITS
+from .gravity import prepare_gravity
 
 
 def leader_sample(reader):
@@ -159,13 +153,15 @@ class Teleoperation:
                         stack.enter_context(bus_lease(interface, exclusive=True))
                         bus = ClassicBus(interface, self.profile.feedback_timeout_s)
                         stack.callback(bus.close)
-                        record(side, {"event": "preflight", "motors": bus.preflight()})
+                        preflight = bus.preflight()
+                        record(side, {"event": "preflight", "motors": preflight})
+                        gravity = prepare_gravity(self.profile, side, bus, preflight)
                         check_modes(bus, True, self.cancel.is_set)
                         # No arm enables until every selected bus passes preflight.
                         prepared.wait()
                         control = stack.enter_context(ArmHold(
                             bus, cancelled, lambda event: record(side, event),
-                            lambda states: None, tracking=True))
+                            lambda states: None, tracking=True, gravity=gravity))
                         # Cancel peer loops before this arm's disable readback waits.
                         stack.enter_context(stop_peers_on_error())
                         period = 1 / self.profile.rate_hz

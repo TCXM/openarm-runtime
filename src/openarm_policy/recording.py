@@ -1,0 +1,98 @@
+"""Explicit episode storage with array sidecars; no pickle or hidden disk writes."""
+from dataclasses import is_dataclass
+import json
+from pathlib import Path
+import threading
+
+from .contracts import Observation, SensorSample
+
+
+class EpisodeRecorder:
+    """Lossless observations + submitted actions, not a training dataset format.
+
+    Caller owns lifetime. Writes synchronously; use fast local storage. Device
+    watchdogs remain independent of I/O. Failure is propagated, never silently
+    dropping training samples. Repeated sample sequences reuse their sidecars.
+    """
+    def __init__(self, directory):
+        self.directory = Path(directory)
+        self.directory.mkdir(parents=True, exist_ok=False)
+        self.file = (self.directory / "events.jsonl").open("x")
+        self.lock = threading.Lock()
+        self.counter = 0
+        self.arrays = {}
+
+    def _encode(self, value):
+        if hasattr(value, "shape") and hasattr(value, "dtype"):
+            import numpy as np
+            if value.dtype.hasobject:
+                raise TypeError("Object arrays are not recordable")
+            self.counter += 1
+            name = f"array-{self.counter:08d}.npy"
+            np.save(self.directory / name, value, allow_pickle=False)
+            return {"array": name}
+        if is_dataclass(value):
+            # asdict deep-copies images; walk fields instead.
+            from dataclasses import fields
+            return {f.name: self._encode(getattr(value, f.name)) for f in fields(value)}
+        if isinstance(value, dict):
+            return {k: self._encode(v) for k, v in value.items()}
+        if isinstance(value, (tuple, list)):
+            return [self._encode(v) for v in value]
+        return value
+
+    def record(self, event):
+        with self.lock:
+            if event.get("event") == "observation":
+                observation = event["observation"]
+                streams = {}
+                for name, history in observation.streams.items():
+                    streams[name] = []
+                    for sample in history:
+                        key = (name, sample.sequence)
+                        if key not in self.arrays:
+                            self.arrays[key] = self._encode(sample)
+                        streams[name].append(self.arrays[key])
+                payload = dict(event, observation=dict(sequence=observation.sequence,
+                               captured_at=observation.captured_at, version=observation.version, streams=streams))
+                # Keep only this observation's bounded history, not an episode-sized cache.
+                keys = {(name, s.sequence) for name, history in observation.streams.items() for s in history}
+                self.arrays = {k: v for k, v in self.arrays.items() if k in keys}
+            else:
+                payload = self._encode(event)
+            self.file.write(json.dumps(payload, allow_nan=False) + "\n")
+            self.file.flush()
+
+    def close(self):
+        self.file.close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_):
+        self.close()
+
+
+def replay_observations(directory):
+    """Yield saved observations in their original monotonic time domain, offline."""
+    root = Path(directory).resolve()
+
+    def decode(value):
+        if isinstance(value, dict) and set(value) == {"array"}:
+            import numpy as np
+            path = (root / value["array"]).resolve()
+            if path.parent != root:
+                raise ValueError("Array path escapes episode")
+            return np.load(path, allow_pickle=False)
+        if isinstance(value, list):
+            return tuple(decode(v) for v in value)
+        return value
+
+    with (root / "events.jsonl").open() as handle:
+        for line in handle:
+            event = json.loads(line)
+            if event["event"] == "observation":
+                obs = event["observation"]
+                streams = {name: tuple(SensorSample(**dict(s, data=decode(s["data"]))) for s in history)
+                           for name, history in obs["streams"].items()}
+                yield Observation(obs["sequence"], obs["captured_at"], streams, obs["version"])

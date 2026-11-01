@@ -17,9 +17,10 @@ FOLLOWER_KD = (1.5, 1.5, 3.0, 5.0, 0.3, 0.3, 0.3, 0.3)
 
 
 class ArmHold:
-    def __init__(self, bus, cancelled, record, publish, *, tracking=False, manual_side=None):
+    def __init__(self, bus, cancelled, record, publish, *, tracking=False, manual_side=None, gravity=None):
         self.bus, self.cancelled, self.record, self.publish = bus, cancelled, record, publish
         self.tracking = tracking
+        self.gravity = gravity
         self.manual_bounds = joint_bounds_deg(manual_side) if manual_side is not None else None
         self.motion = None
         if manual_side is not None:
@@ -51,10 +52,12 @@ class ArmHold:
         try:
             self.check_cancelled()
             self.bus.prepare_encoder(IDS)
+            initial = {}
             for mid in IDS:
                 self.check_cancelled()
                 state = self.bus.state(mid)
                 self.validate(state, enabled=False)
+                initial[mid] = state
                 if self.motion:
                     self.motion.validate_position(mid, state.position)
                     if abs(state.velocity) > .08:
@@ -63,6 +66,9 @@ class ArmHold:
                     lower, upper = self.manual_bounds[mid]
                     finite(math.degrees(state.position), lower-0.5, upper+0.5, "initial_angle_deg")
                 self.bus.command(mid, "position", state.position, 0, 0)
+            if self.gravity is not None:
+                self.gravity.preflight(initial, self.bus.ranges)
+                self.record({"event": "gravity_config", **self.gravity.metadata()})
             for mid in IDS:
                 self.check_cancelled()
                 self.attempted.append(mid)
@@ -204,9 +210,19 @@ class ArmHold:
                      "issued_kp": kp, "issued_kd": kd}
             self.trace.append(frame)
         try:
+            feedforward = None if self.gravity is None else self.gravity.update(self.states)
+            if feedforward is not None:
+                for mid in IDS:
+                    state = self.states[mid]
+                    effort = kp[mid-1] * (targets[mid] - state.position) - kd[mid-1] * state.velocity + feedforward[mid]
+                    if abs(effort) > .9 * self.bus.ranges[mid].torque:
+                        raise RuntimeError(f"ID{mid}: combined PD/gravity effort near firmware range")
+                if frame is not None:
+                    frame["gravity"] = self.gravity.last
             if self.motion:
-                self.motion.supervise(self.states, targets, self.bus.ranges, kp, kd, time.monotonic())
-            states = self.bus.exchange(targets, kp, kd)
+                self.motion.supervise(self.states, targets, self.bus.ranges, kp, kd, time.monotonic(), feedforward=feedforward)
+            states = (self.bus.exchange(targets, kp, kd) if feedforward is None else
+                      self.bus.exchange(targets, kp, kd, feedforward))
             if frame is not None:
                 frame["feedback"] = {mid: asdict(s) for mid, s in states.items()}
             if set(states) != set(IDS):
@@ -216,7 +232,7 @@ class ArmHold:
                     raise RuntimeError("Feedback ID mismatch")
                 self.validate(state)
             if self.motion:
-                self.motion.supervise(states, targets, self.bus.ranges, kp, kd, time.monotonic(), after=True)
+                self.motion.supervise(states, targets, self.bus.ranges, kp, kd, time.monotonic(), after=True, feedforward=feedforward)
         except BaseException as exc:
             if frame is not None:
                 frame["error"] = str(exc)
@@ -226,6 +242,10 @@ class ArmHold:
         self.states, self.targets = states, targets
         self.publish(states)
         self.cycles += 1
+        if self.gravity is not None:
+            self.record({"event": "gravity_sample", "time": time.monotonic(),
+                         "targets_rad": dict(targets), "gravity": self.gravity.last,
+                         "states": {mid: asdict(s) for mid, s in states.items()}})
         if self.cycles % 20 == 0:
             self.record({"event": "hold_sample", "targets_rad": targets,
                          "states": {mid: asdict(s) for mid, s in states.items()}})

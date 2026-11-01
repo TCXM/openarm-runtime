@@ -120,11 +120,14 @@ class MotionSession:
             with bus_lease(interface, exclusive=True):
                 bus = ClassicBus(interface, self.profile.feedback_timeout_s)
                 try:
-                    report.record({"event": "preflight", "motors": bus.preflight()})
+                    from .gravity import prepare_gravity
+                    preflight = bus.preflight()
+                    report.record({"event": "preflight", "motors": preflight})
                     modes = check_modes(bus, allow_unreadable, self.cancel.is_set)
                     report.record({"event": "modes", "readback": modes})
+                    gravity = prepare_gravity(self.profile, self.side, bus, preflight)
 
-                    with ArmHold(bus, self.cancel.is_set, report.record, publish, manual_side=self.side) as control:
+                    with ArmHold(bus, self.cancel.is_set, report.record, publish, manual_side=self.side, gravity=gravity) as control:
                         self.base = dict(control.base)
                         self.ready = True
                         self.message = f"{interface} 整臂已使能并保持；拖动该臂滑条即可移动。"

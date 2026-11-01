@@ -6,6 +6,7 @@ from .arm import ArmHold
 from .config import bus_lease
 from .telemetry import IDS
 from .transport import ClassicBus
+from .gravity import prepare_gravity
 
 
 def _ignore(_event):
@@ -52,10 +53,12 @@ def hold_arm(profile, side, *, allow_unreadable_mode=False, cancelled=_running,
     with bus_lease(interface, exclusive=True):
         bus = ClassicBus(interface, profile.feedback_timeout_s)
         try:
-            record({"event": "preflight", "motors": bus.preflight()})
+            preflight = bus.preflight()
+            record({"event": "preflight", "motors": preflight})
+            gravity = prepare_gravity(profile, side, bus, preflight)
             modes = check_modes(bus, allow_unreadable_mode, cancelled)
             record({"event": "modes", "readback": modes})
-            with ArmHold(bus, cancelled, record, publish) as arm:
+            with ArmHold(bus, cancelled, record, publish, gravity=gravity) as arm:
                 yield arm
         finally:
             bus.close()

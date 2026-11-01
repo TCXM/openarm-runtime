@@ -81,7 +81,7 @@ class SmoothMotion:
         self.positions, self.velocities = positions, velocities
         return dict(positions)
 
-    def supervise(self, states, targets, ranges, kp, kd, now, *, after=False):
+    def supervise(self, states, targets, ranges, kp, kd, now, *, after=False, feedforward=None):
         if set(states) != set(IDS):
             raise RuntimeError('Incomplete protected motion feedback')
         for mid in IDS:
@@ -89,7 +89,7 @@ class SmoothMotion:
             self.validate_position(mid, state.position)
             limit = min(RATED_TORQUE_NM[mid-1], .9*ranges[mid].torque)
             error = targets[mid]-state.position
-            predicted = kp[mid-1]*error-kd[mid-1]*state.velocity
+            predicted = kp[mid-1]*error-kd[mid-1]*state.velocity + (feedforward or {}).get(mid, 0.0)
             if abs(state.torque) > limit:
                 raise RuntimeError(f'J{mid}: measured torque {state.torque:.2f} Nm exceeds {limit:g} Nm')
             if abs(predicted) > limit:

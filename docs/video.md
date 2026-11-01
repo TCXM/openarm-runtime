@@ -8,7 +8,7 @@ configuration and context-managed lifecycle. Python3.12 is required.
 
 ```sh
 # Pinned release:
-python -m pip install "openarm-runtime[video] @ git+https://github.com/TCXM/openarm-runtime.git@v0.6.0"
+python -m pip install "openarm-runtime[video] @ git+https://github.com/TCXM/openarm-runtime.git@v0.7.0"
 # Or develop this checkout:
 python -m pip install -e ".[video]"
 # Alternatively, for this repository's uv workflow:
@@ -20,6 +20,14 @@ serial SDK or CAN SDK is needed. Device access is first attempted by constructin
 a synchronous camera, or starting/entering a reader/capture group.
 
 ## Profiles
+
+The standalone browser viewer presents a large `head` RGB view beside the other
+RGB feeds on desktop, and stacks them on phones. Depth is hidden from the default
+grid: select it from the view menu or enable it in the collapsed preview settings.
+Each card shows connection state and browser update FPS (not sensor capture FPS).
+Pause, fullscreen, single-camera view and automatic reconnect are available;
+hidden browser tabs suspend preview requests. Pausing the browser does not stop
+the caller-owned capture service.
 
 Copy `video.example.json` to a caller-owned configuration directory and set real
 paths. Each entry has a unique `name`, `kind` (`rgb` or `depth`), resolution and

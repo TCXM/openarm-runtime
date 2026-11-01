@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.7.0 — 2026-11-01
+
+- Add optional Pinocchio gravity feedforward shared by hold, panel, teleoperation
+  and policy execution; explicit model/motor mappings, payload, shadow mode,
+  ramp/caps/slew, firmware-range-correct torque encoding and per-cycle audit data.
+  Include offline gravity CLI and analytic/lifecycle tests. Operator-authorized
+  right-arm 50%/100% compensation trials completed with verified motor disable;
+  full-workspace and dual-arm compensation validation remain outstanding.
+
+- Add model-independent policy contracts, timestamped sensor histories, asynchronous
+  process-isolated inference, time-anchored action chunks and independent Classic
+  CAN execution/watchdogs. Include simulation, plugin CLI, recording/replay and
+  offline lifecycle tests. Validate one right-arm sine cycle through the physical
+  backend, including recording, gravity feedforward and verified disable.
+
+- Simplify the standalone camera viewer with a primary head view, compact RGB
+  views, responsive mobile layout, per-view status and browser update FPS.
+  Preview settings and optional depth views are collapsed by default.
+
 ## 0.6.0 — 2026-10-31
 
 - Add the local OpenArm Platform workspace with unchanged control, teleoperation,

@@ -105,7 +105,8 @@ class TactileReader:
             if state == "live" and age is not None and age > 0.5:
                 state = "stale"
             return dict(state=state, error=self._error, sample=self._sample,
-                        sequence=self._sequence, age_s=age, rate_hz=self._rate)
+                        sequence=self._sequence, received_at=self._received,
+                        age_s=age, rate_hz=self._rate)
 
     def start(self):
         if self._thread is not None or self._stop.is_set():

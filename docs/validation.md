@@ -98,6 +98,14 @@ not quantified trajectory accuracy, full-range acceptance or unattended reliabil
 
 ## Retained protocol findings
 
+Development gravity extension (2026-11-01): optional Pinocchio inverse statics and
+bounded feedforward are implemented; see [gravity configuration and validation](gravity.md).
+Zero-feedforward behavior below describes the previously commissioned baseline.
+The extension supports nonzero torque using the firmware/SDK TMAX ratio without
+changing firmware or the official SDK. Operator-authorized right-arm active
+trials are recorded in [physical results](gravity.md#physical-right-arm-trials);
+these do not constitute full-workspace or dual-arm compensation acceptance.
+
 - Each motor's can_br must read4; host configuration must be Classic 1 Mbps.
 - J1/J2 RID10 may time out despite normal state/control replies. The panel's explicit
   MIT-trial option permits this case; a readback identifying another mode still rejects.
